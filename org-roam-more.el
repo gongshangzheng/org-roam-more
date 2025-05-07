@@ -19,7 +19,9 @@
 ;;
 ;;; Code:
 
-(defun my/org-heading-name-to-olp (file title)
+(defun org-roam-more-heading-to-olp (file title)
+  "Convert a heading TITLE in FILE to its outline path (OLP).
+Returns the outline path as a list of strings representing the heading hierarchy."
   "Find the first heading with TITLE in FILE and return its outline path (OLP) directly to the node."
   (let ((buffer (find-file-noselect file)))
     (with-current-buffer buffer
@@ -33,7 +35,10 @@
                  ;; Return the outline path directly to this node
                  (org-get-outline-path t)))))
          nil t)))))  ;  Returns the outline path for the heading itself.
-(defun my/org-subheadings-under-olp (file parent-olp)
+(defun org-roam-more-subheadings-under-olp (file parent-olp)
+  "Get direct subheadings under PARENT-OLP in FILE.
+PARENT-OLP should be a list representing the parent heading's outline path.
+Returns a list of subheading titles as strings."
   "Return a list of direct subheadings under PARENT-OLP in FILE."
   (let ((buffer (find-file-noselect file)))
     (with-current-buffer buffer
@@ -51,14 +56,19 @@
                  ;; (message "Matched parent OLP: %S" parent-olp)
                  (push headline result)))))
          (nreverse result))))))
-(defun my/org-roam-node-insert-transclude ()
+(defun org-roam-more-insert-transclude ()
+  "Insert a transclusion link at point.
+Creates a #+transclude: directive followed by an org-roam node link."
   (interactive)
   (unless (derived-mode-p 'org-mode)
     (user-error "This command only works in Org mode"))
   (unless (bolp) (insert "\n"))
   (insert "#+transclude: ")
   (org-roam-node-insert))
-(defun my/org-roam-capture-under-node ()
+(defun org-roam-more-capture-under-node ()
+  "Capture a new node as subheading under an existing node.
+Prompts for parent node, then creates new subheading with completion
+against existing subheadings to prevent duplicates."
   "Prompt the user to choose an existing Org-roam node, then create a new subheading under it."
   (interactive)
   (let* ((parent-node (org-roam-node-read)) ; User picks existing node
@@ -83,7 +93,11 @@
             :if-new (file+olp ,file ,new-olp)
             :immediate-finish nil
             :unnarrowed t)))))))
-(defun my/org-roam-get-node-content (node &optional remove-properties remove-heading)
+(defun org-roam-more-get-node-content (node &optional remove-properties remove-heading)
+  "Get content of NODE with optional formatting.
+When REMOVE-PROPERTIES is non-nil, strips :PROPERTIES: drawer.
+When REMOVE-HEADING is non-nil, removes the heading line.
+Returns content as string."
   "获取 org-roam NODE 的内容。
 如果 REMOVE-PROPERTIES 为非 nil，则去除 :PROPERTIES: 区块。
 如果 REMOVE-HEADING 为非 nil，则去除首行标题（保留子标题）。"
