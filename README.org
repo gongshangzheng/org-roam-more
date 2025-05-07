@@ -1,0 +1,106 @@
+#+TITLE: org-roam-more - Enhanced Org-Roam Functionality
+#+AUTHOR: Your Name
+#+DATE: 2025-05-07
+
+* Overview
+org-roam-more provides additional functionality for [[https://www.orgroam.com/][org-roam]], including:
+- Advanced transclusion management
+- Content synchronization between nodes
+- Node content manipulation utilities
+- Hierarchical node operations
+
+* Installation
+** Using straight.el
+#+BEGIN_SRC elisp
+(straight-use-package
+ '(org-roam-more :type git :host github :repo "yourusername/org-roam-more"))
+#+END_SRC
+
+** Using use-package
+#+BEGIN_SRC elisp
+(use-package org-roam-more
+  :after org-roam
+  :config
+  (require 'org-roam-more))
+#+END_SRC
+
+* Configuration
+No mandatory configuration is required, but you can customize:
+
+#+BEGIN_SRC elisp
+;; Set default behavior for property removal
+(setq org-roam-more-remove-properties-by-default t)
+#+END_SRC
+
+* Key Features
+** Transclusion Management
+- Insert transclusions with =org-roam-more-insert-transclude=
+- Compare transcluded content with =org-roam-more-compare-transclusion-and-roam-content=
+- Sync content bidirectionally:
+  - =org-roam-more-sync-transclusion-content-to-org-roam=
+  - =org-roam-more-sync-org-roam-content-to-transclusion=
+
+** Node Content Operations
+- Get node content with formatting options:
+  - =org-roam-more-get-node-content=
+  - =org-roam-more-get-node-body=
+- Set node content while preserving structure:
+  - =org-roam-more-set-node-content=
+
+** Hierarchical Operations
+- Create subheadings under existing nodes:
+  - =org-roam-more-capture-under-node=
+- Navigate node hierarchies:
+  - =org-roam-more-heading-to-olp=
+  - =org-roam-more-subheadings-under-olp=
+
+* Usage Examples
+** Basic Transclusion
+#+BEGIN_SRC elisp
+;; Insert a transclusion link
+(org-roam-more-insert-transclude)
+
+;; Sync all transclusions to their nodes
+(org-roam-more-sync-transclusion-content-to-org-roam)
+#+END_SRC
+
+** Node Content Manipulation
+#+BEGIN_SRC elisp
+;; Get node content without properties
+(let ((content (org-roam-more-get-node-content node t)))
+  (message "Node content: %s" content))
+
+;; Update node content while preserving heading
+(org-roam-more-set-node-content node new-content)
+#+END_SRC
+
+** Hierarchy Management
+#+BEGIN_SRC elisp
+;; Create new subheading under existing node
+(org-roam-more-capture-under-node)
+
+;; Get all subheadings under a parent
+(let ((subheadings (org-roam-more-subheadings-under-olp file parent-olp)))
+  (message "Subheadings: %S" subheadings))
+#+END_SRC
+
+* Function Reference
+| Function Name                                      | Description                                                                 |
+|----------------------------------------------------|-----------------------------------------------------------------------------|
+| org-roam-more-heading-to-olp                      | Convert heading title to outline path                                      |
+| org-roam-more-subheadings-under-olp               | Get subheadings under a parent outline path                                |
+| org-roam-more-insert-transclude                   | Insert transclusion link                                                   |
+| org-roam-more-capture-under-node                  | Create new subheading under existing node                                  |
+| org-roam-more-get-node-content                    | Get node content with formatting options                                   |
+| org-roam-more-set-node-content                    | Set node content while preserving structure                                |
+| org-roam-more-get-node-body                       | Get node body content by title/alias                                       |
+| org-roam-more-get-transclusion-entries            | Get all transclusion entries in current file                               |
+| org-roam-more-get-transclusion-paths              | Get outline paths of all transclusion entries                              |
+| org-roam-more-get-content-at-path                 | Get content at specific outline path                                       |
+| org-roam-more-set-content-at-path                 | Set content at specific outline path                                       |
+| org-roam-more-compare-transclusion-and-roam-content | Compare transclusion content with node content using ediff                |
+| org-roam-more-sync-transclusion-content-to-org-roam | Sync transclusion content to org-roam nodes                              |
+| org-roam-more-sync-org-roam-content-to-transclusion | Sync org-roam node content to transclusions                              |
+
+* License
+GPL-3.0-or-later
