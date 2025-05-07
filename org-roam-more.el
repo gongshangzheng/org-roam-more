@@ -18,6 +18,10 @@
 ;;  Some complementary functions to org-roam
 ;;
 ;;; Code:
+(defcustom org-roam-more/transclusion-insert-content nil
+  "If non-nil, `org-roam-more-insert-transclude' inserts full content instead of a #+transclude link."
+  :type 'boolean
+  :group 'org-roam-more)
 
 (defun org-roam-more-heading-to-olp (file title)
   "Convert a heading TITLE in FILE to its outline path (OLP).
@@ -56,15 +60,35 @@ Returns a list of subheading titles as strings."
                  ;; (message "Matched parent OLP: %S" parent-olp)
                  (push headline result)))))
          (nreverse result))))))
-(defun org-roam-more-insert-transclude ()
-  "Insert a transclusion link at point.
-Creates a #+transclude: directive followed by an org-roam node link."
-  (interactive)
-  (unless (derived-mode-p 'org-mode)
-    (user-error "This command only works in Org mode"))
-  (unless (bolp) (insert "\n"))
-  (insert "#+transclude: ")
-  (org-roam-node-insert))
+(defun org-roam-more-insert-transclude (&optional insert-content)
+  "Prompt for a title or alias, and insert a heading with properties and content from the Org-roam node.
+If INSERT-CONTENT is non-nil (interactively via prefix arg), include the full content; otherwise insert a #+transclude link."
+  (interactive "P")
+  (let* ((node (org-roam-node-read)))
+    (unless node
+      (user-error "未找到节点"))
+    (unless (derived-mode-p 'org-mode)
+      (user-error "This command only works in Org mode"))
+    (unless (bolp) (insert "\n"))
+
+    (let* ((heading (org-roam-node-title node))
+           (node-id (org-roam-node-id node))
+           (insert-content (or insert-content org-roam-more/transclusion-insert-content))
+           (node-content (when insert-content
+                           (org-roam-more-get-node-content node t t)))) ;; remove heading and properties
+      ;; Insert new heading
+      (insert (concat "* " heading ":transclusion:\n"))
+      ;; Insert properties
+      (insert ":PROPERTIES:\n")
+      (insert (format ":ORIGINAL-HEADING: %s\n" heading))
+      (insert (format ":ORIGINAL-ID: %s\n" node-id))
+      (insert ":END:\n\n")
+      ;; Insert content or transclude link
+      (if insert-content
+          (insert node-content "\n")
+        (insert (format "#+transclude: [[id:%s]]\n" node-id))))))
+
+
 (defun org-roam-more-capture-under-node ()
   "Capture a new node as subheading under an existing node.
 Prompts for parent node, then creates new subheading with completion

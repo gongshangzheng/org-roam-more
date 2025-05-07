@@ -16,14 +16,21 @@ org-roam-more provides additional functionality for [[https://www.orgroam.com/][
  '(org-roam-more :type git :host github :repo "gongshangzheng/org-roam-more"))
 #+END_SRC
 
-** Using use-package
+** Using use-package and quelpa
 #+BEGIN_SRC elisp
 (use-package org-roam-more
   :after org-roam
+  :ensure t
+  :quelpa (org-roam-more :fetcher github :repo "gongshangzheng/org-roam-more"))
+#+END_SRC
+** Download manually
+#+begin_src emacs-lisp :tangle yes :comments link
+(use-package org-roam-more
+  :after org-roam
+  :load-path "/path/to/org-roam-more/"
   :config
   (require 'org-roam-more))
-#+END_SRC
-
+#+end_src
 * Configuration
 No configuration is required.
 * Key Features
