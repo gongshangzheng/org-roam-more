@@ -1,21 +1,21 @@
 ;;; org-roam-more.el --- Description -*- lexical-binding: t; -*-
 ;;
 ;; Copyright (C) 2025
-;;
+;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Author:  <xinyu@arch>
 ;; Maintainer:  <xinyu@arch>
 ;; Created: May 07, 2025
 ;; Modified: May 07, 2025
 ;; Version: 0.0.1
 ;; Keywords: abbrev bib c calendar comm convenience data docs emulations extensions faces files frames games hardware help hypermedia i18n internal languages lisp local maint mail matching mouse multimedia news outlines processes terminals tex tools unix vc wp
-;; Homepage: https://github.com/xinyu/org-roam-more
+;; Homepage: https://github.com/gongshangzheng/org-roam-more
 ;; Package-Requires: ((emacs "24.3"))
 ;;
 ;; This file is not part of GNU Emacs.
 ;;
 ;;; Commentary:
 ;;
-;;  Description
+;;  Some complementary functions to org-roam
 ;;
 ;;; Code:
 
