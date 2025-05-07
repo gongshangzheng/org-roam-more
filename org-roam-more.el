@@ -261,7 +261,7 @@ and corresponding org-roam node content. Updates both after ediff completes."
   "对当前文件中所有带有标签 :transclusion: 的项，分别从 Org 文件和 Org-roam 中获取其内容，并使用 ediff 进行对比。
 在 ediff 退出后，将 buffer A 的内容写回 Org 文件，将 buffer B 的内容写回 org-roam 节点。"
   (interactive)
-  (let ((transclusion-paths (my/org-get-transclusion-paths)))
+  (let ((transclusion-paths (org-roam-more-get-transclusion-paths)))
     (dolist (path transclusion-paths)
       (let* ((title-or-alias (car (last path)))
              (node (org-roam-node-from-title-or-alias title-or-alias))
@@ -295,14 +295,14 @@ corresponding org-roam node while preserving headings and properties."
   "将当前文件中所有带有标签 :transclusion: 的项的内容直接同步到对应的 Org-roam 节点中。
 保留标题和属性，仅替换正文内容。"
   (interactive)
-  (let ((transclusion-paths (my/org-get-transclusion-paths)))
+  (let ((transclusion-paths (org-roam-more-get-transclusion-paths)))
     (dolist (path transclusion-paths)
       (let* ((title-or-alias (car (last path)))
              (node (org-roam-node-from-title-or-alias title-or-alias))
              (current-content-list (my/org-get-content-at-path path t t))) ;; 移除 heading 和 properties
         (if (and node current-content-list)
             (let ((new-content (car current-content-list)))
-              (my/org-roam-set-node-content node new-content)
+              (org-roam-more-set-node-content node new-content)
               (message "已同步内容到 Org-roam 节点：%s" title-or-alias))
           (message "未找到节点或内容为空：%s" title-or-alias))))))
 (defun org-roam-more-sync-org-roam-content-to-transclusion ()
@@ -319,7 +319,7 @@ corresponding org-roam node while preserving headings and properties."
              (roam-content (my/org-roam-get-node-content node t))) ;; 移除 properties 和 heading
         (if (and node roam-content)
             (let ((new-content roam-content))
-              (my/org-set-content-at-path path new-content)
+              (org-roam-more-set-content-at-path path new-content)
               (message "已同步 Org-roam 节点内容到：%s" title-or-alias))
           (message "未找到节点或内容为空：%s" title-or-alias))))))
 
