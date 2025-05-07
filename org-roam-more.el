@@ -74,10 +74,10 @@ against existing subheadings to prevent duplicates."
   (let* ((parent-node (org-roam-node-read)) ; User picks existing node
          (file (org-roam-node-file parent-node))
          (parent-title (org-roam-node-title (org-roam-node-from-title-or-alias (org-roam-node-title parent-node))))
-         (parent-olp (my/org-heading-name-to-olp file parent-title)))
+         (parent-olp (org-roam-more-heading-name-to-olp file parent-title)))
     (unless parent-olp
       (error "Impossible de trouver l'OLP pour le titre: %s" parent-title))
-    (let* ((existing-subheadings (my/org-subheadings-under-olp file parent-olp))
+    (let* ((existing-subheadings (org-roam-more-subheadings-under-olp file parent-olp))
            (new-title (completing-read
                        "Entrer le titre du nouveau sous-heading: "
                        existing-subheadings nil nil)))
@@ -151,7 +151,7 @@ Returns content as string or nil if not found."
   (interactive "s输入标题或别名: \nP")
   (let ((node (org-roam-node-from-title-or-alias title-or-alias)))
     (if node
-        (let ((content (my/org-roam-get-node-content node remove-properties remove-heading)))
+        (let ((content (org-roam-more-roam-get-node-content node remove-properties remove-heading)))
           (message "找到节点：%s\n内容： %s" (org-roam-node-title node) content)
           content)
       (progn
@@ -266,7 +266,7 @@ and corresponding org-roam node content. Updates both after ediff completes."
       (let* ((title-or-alias (car (last path)))
              (node (org-roam-node-from-title-or-alias title-or-alias))
              (roam-content (org-roam-more-get-node-content node t))
-             (current-content-list (my/org-get-content-at-path path t t))) ;; 移除 properties 和 heading
+             (current-content-list (org-roam-more-get-content-at-path path t t))) ;; 移除 properties 和 heading
         (if (and roam-content current-content-list)
             (let* ((current-content (car current-content-list))
                    (buf-a (generate-new-buffer (format "*Org: %s*" title-or-alias)))
@@ -299,10 +299,10 @@ corresponding org-roam node while preserving headings and properties."
     (dolist (path transclusion-paths)
       (let* ((title-or-alias (car (last path)))
              (node (org-roam-node-from-title-or-alias title-or-alias))
-             (current-content-list (my/org-get-content-at-path path t t))) ;; 移除 heading 和 properties
+             (current-content-list (org-roam-more-get-content-at-path path t t))) ;; 移除 heading 和 properties
         (if (and node current-content-list)
             (let ((new-content (car current-content-list)))
-              (org-roam-more-set-node-content node new-content)
+              (org-roam-more-roam-set-node-content node new-content)
               (message "已同步内容到 Org-roam 节点：%s" title-or-alias))
           (message "未找到节点或内容为空：%s" title-or-alias))))))
 (defun org-roam-more-sync-org-roam-content-to-transclusion ()
@@ -312,11 +312,11 @@ corresponding org-roam node while preserving headings and properties."
   "将所有 Org-roam 节点的内容同步到当前文件中带有标签 :transclusion: 的项中。
 保留标题和属性，仅替换正文内容。"
   (interactive)
-  (let ((transclusion-paths (my/org-get-transclusion-paths)))
+  (let ((transclusion-paths (org-roam-more-get-transclusion-paths)))
     (dolist (path transclusion-paths)
       (let* ((title-or-alias (car (last path)))
              (node (org-roam-node-from-title-or-alias title-or-alias))
-             (roam-content (my/org-roam-get-node-content node t))) ;; 移除 properties 和 heading
+             (roam-content (org-roam-more-roam-get-node-content node t))) ;; 移除 properties 和 heading
         (if (and node roam-content)
             (let ((new-content roam-content))
               (org-roam-more-set-content-at-path path new-content)

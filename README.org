@@ -13,7 +13,7 @@ org-roam-more provides additional functionality for [[https://www.orgroam.com/][
 ** Using straight.el
 #+BEGIN_SRC elisp
 (straight-use-package
- '(org-roam-more :type git :host github :repo "yourusername/org-roam-more"))
+ '(org-roam-more :type git :host github :repo "gongshangzheng/org-roam-more"))
 #+END_SRC
 
 ** Using use-package
@@ -25,13 +25,7 @@ org-roam-more provides additional functionality for [[https://www.orgroam.com/][
 #+END_SRC
 
 * Configuration
-No mandatory configuration is required, but you can customize:
-
-#+BEGIN_SRC elisp
-;; Set default behavior for property removal
-(setq org-roam-more-remove-properties-by-default t)
-#+END_SRC
-
+No configuration is required.
 * Key Features
 ** Transclusion Management
 - Insert transclusions with =org-roam-more-insert-transclude=
