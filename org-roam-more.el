@@ -60,35 +60,6 @@ Returns a list of subheading titles as strings."
                  ;; (message "Matched parent OLP: %S" parent-olp)
                  (push headline result)))))
          (nreverse result))))))
-(defun org-roam-more-insert-transclude (&optional insert-content)
-  "Prompt for a title or alias, and insert a heading with properties and content from the Org-roam node.
-If INSERT-CONTENT is non-nil (interactively via prefix arg), include the full content; otherwise insert a #+transclude link."
-  (interactive "P")
-  (let* ((node (org-roam-node-read)))
-    (unless node
-      (user-error "未找到节点"))
-    (unless (derived-mode-p 'org-mode)
-      (user-error "This command only works in Org mode"))
-    (unless (bolp) (insert "\n"))
-
-    (let* ((heading (org-roam-node-title node))
-           (node-id (org-roam-node-id node))
-           (insert-content (or insert-content org-roam-more/transclusion-insert-content))
-           (node-content (when insert-content
-                           (org-roam-more-get-node-content node t t)))) ;; remove heading and properties
-      ;; Insert new heading
-      (insert (concat "* " heading ":transclusion:\n"))
-      ;; Insert properties
-      (insert ":PROPERTIES:\n")
-      (insert (format ":ORIGINAL-HEADING: %s\n" heading))
-      (insert (format ":ORIGINAL-ID: %s\n" node-id))
-      (insert ":END:\n\n")
-      ;; Insert content or transclude link
-      (if insert-content
-          (insert node-content "\n")
-        (insert (format "#+transclude: [[id:%s]]\n" node-id))))))
-
-
 (defun org-roam-more-capture-under-node ()
   "Capture a new node as subheading under an existing node.
 Prompts for parent node, then creates new subheading with completion
@@ -181,6 +152,36 @@ Returns content as string or nil if not found."
       (progn
         (message "没有找到名为 '%s' 的 node。" title-or-alias)
         nil))))
+(defun org-roam-more-insert-transclude (&optional insert-content)
+  "Prompt for a title or alias, and insert a heading with properties and content from the Org-roam node.
+If INSERT-CONTENT is non-nil (interactively via prefix arg), include the full content; otherwise insert a #+transclude link."
+  (interactive "P")
+  (let* ((node (org-roam-node-read)))
+    (unless node
+      (user-error "未找到节点"))
+    (unless (derived-mode-p 'org-mode)
+      (user-error "This command only works in Org mode"))
+    (unless (bolp) (insert "\n"))
+
+    (let* ((heading (org-roam-node-title node))
+           (node-id (org-roam-node-id node))
+           (file-path (org-roam-node-file node))
+           (insert-content (or insert-content org-roam-more/transclusion-insert-content))
+           (node-content (when insert-content
+                           (org-roam-more-get-node-content node t t)))) ;; remove heading and properties
+      ;; Insert new heading
+      (insert (concat "** " heading " :transclusion:\n"))
+      ;; Insert properties
+      (insert ":PROPERTIES:\n")
+      (insert (format ":ORIGINAL-HEADING: %s\n" heading))
+      (insert (format ":ORIGINAL-ID: %s\n" node-id))
+      (insert (format ":ORIGINAL-FILE: [[file:%s]]\n" file-path))
+      (insert (format ":ORIGINAL-NODE-LINK: [[id:%s][%s]]\n" node-id heading)) ;; Org-roam style link
+      (insert ":END:\n")
+      ;; Insert content or transclude link
+      (if insert-content
+          (insert node-content)
+        (insert (format "#+transclude: [[id:%s]]\n" node-id))))))
 (defun org-roam-more-get-transclusion-entries (&optional remove-properties remove-heading)
   "Get all transclusion entries (headlines with :transclusion: tag) in current file.
 When REMOVE-PROPERTIES is non-nil, removes :PROPERTIES: blocks.
