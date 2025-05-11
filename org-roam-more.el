@@ -22,6 +22,14 @@
   "If non-nil, `org-roam-more-insert-transclude' inserts full content instead of a #+transclude link."
   :type 'boolean
   :group 'org-roam-more)
+(defun org-roam-more-get-current-path ()
+  "返回当前 Org 条目的 OLP（Outline Path），也就是标题层级列表。
+包含当前标题，从最顶层到当前条目的顺序排列。"
+  (let ((olp (list (org-get-heading t t t t)))) ; 先加入当前标题
+    (save-excursion
+      (while (org-up-heading-safe)
+        (push (org-get-heading t t t t) olp)))
+    olp))
 
 (defun org-roam-more-heading-to-olp (file title)
   "Convert a heading TITLE in FILE to its outline path (OLP).
@@ -219,29 +227,43 @@ Returns list of paths (each path is a list of strings)."
               (push path paths))))))
     (nreverse paths)))
 (defun org-roam-more-get-content-at-path (path &optional remove-properties remove-heading)
-  "Get content at PATH (list of heading titles) in current file.
-When REMOVE-PROPERTIES is non-nil, removes :PROPERTIES: blocks.
-When REMOVE-HEADING is non-nil, removes heading line.
-Returns content as string or nil if not found."
-  "根据给定路径 PATH（例如标题），返回 Org 文件中该条目的正文内容。
-如果 REMOVE-PROPERTIES 非 nil，则移除 :PROPERTIES: 区块。
-如果 REMOVE-HEADING 非 nil，则移除每个条目的首行标题。"
+  "根据标题路径 PATH，获取当前 Org buffer 中对应条目的正文内容。
+PATH 是一个标题组成的列表，从最外层 heading 到最内层。
+当 REMOVE-PROPERTIES 为非 nil 时移除 :PROPERTIES: 区块。
+当 REMOVE-HEADING 为非 nil 时移除首行标题。
+返回条目的内容字符串，若未找到则返回 nil。"
   (interactive)
-  (let ((results '()))
-    (org-element-map (org-element-parse-buffer) 'headline
-      (lambda (headline)
-        (let ((headline-title (org-element-property :title headline)))
-          (when (string= (org-element-interpret-data headline-title) (car (last path)))
-            (let* ((begin (org-element-property :begin headline))
-                   (end (org-element-property :end headline))
-                   (content (buffer-substring-no-properties begin end)))
-              (when remove-properties
-                (setq content (replace-regexp-in-string
-                               ":PROPERTIES:\\(.\\|\n\\)*?:END:\n*" "" content)))
-              (when remove-heading
-                (setq content (mapconcat #'identity (cdr (split-string content "\n")) "\n")))
-              (push content results))))))
-    (nreverse results)))
+  (save-excursion
+    (goto-char (point-min))
+    (let ((current-level 0)
+          (found-pos nil))
+      ;; 逐层匹配路径
+      (dolist (title path)
+        (let ((found nil))
+          (while (and (not found)
+                      (re-search-forward (format org-complex-heading-regexp-format (regexp-quote title)) nil t))
+            (let ((el (org-element-at-point)))
+              (when (and (eq (org-element-type el) 'headline)
+                         (= (org-element-property :level el) (1+ current-level))
+                         (string= (org-element-property :raw-value el) title))
+                (setq current-level (org-element-property :level el))
+                (setq found-pos (point))
+                (setq found t))))
+          (unless found
+            (setq found-pos nil)
+            (cl-return))))
+      (when found-pos
+        (goto-char found-pos)
+        (let* ((el (org-element-at-point))
+               (begin (org-element-property :begin el))
+               (end (org-element-property :end el))
+               (content (buffer-substring-no-properties begin end)))
+          (when remove-properties
+            (setq content (replace-regexp-in-string
+                           ":PROPERTIES:\\(.\\|\n\\)*?:END:\n*" "" content)))
+          (when remove-heading
+            (setq content (mapconcat #'identity (cdr (split-string content "\n")) "\n")))
+          content)))))
 (defun org-roam-more-set-content-at-path (path new-content &optional filepath)
   "Set content at PATH (list of heading titles) to NEW-CONTENT.
 FILEPATH defaults to current buffer's file.
@@ -313,7 +335,6 @@ and corresponding org-roam node content. Updates both after ediff completes."
                 (add-hook 'ediff-after-quit-hook-internal hook-fn))
               (ediff-buffers buf-a buf-b))
           (message "未找到路径或内容为空：%s" path))))))
-
 (defun org-roam-more-sync-transclusion-content-to-org-roam ()
   "Sync content from transclusion entries to their org-roam nodes.
 For all :transclusion: tagged entries, copies their content to the
@@ -324,13 +345,40 @@ corresponding org-roam node while preserving headings and properties."
   (let ((transclusion-paths (org-roam-more-get-transclusion-paths)))
     (dolist (path transclusion-paths)
       (let* ((title-or-alias (car (last path)))
-             (node (org-roam-node-from-title-or-alias title-or-alias))
-             (current-content-list (org-roam-more-get-content-at-path path t t))) ;; 移除 heading 和 properties
-        (if (and node current-content-list)
-            (let ((new-content (car current-content-list)))
+             (original-id (org-entry-get nil "ORIGINAL-ID"))
+             (node (if original-id
+                       (org-roam-node-from-id original-id)
+                     (org-roam-node-from-title-or-alias title-or-alias)))
+             (current-content (org-roam-more-get-content-at-path path t t))) ;; 移除 heading 和 properties
+        (if (and node current-content)
+            (let ((new-content current-content))
               (org-roam-more-set-node-content node new-content)
               (message "已同步内容到 Org-roam 节点：%s" title-or-alias))
           (message "未找到节点或内容为空：%s" title-or-alias))))))
+(defun org-roam-more-sync-current-transclusion-content-to-org-roam ()
+  "Sync content from the current :transclusion: entry to its org-roam node.
+保留标题和属性，仅替换正文内容。"
+  (interactive)
+  (save-excursion
+    (when (org-before-first-heading-p)
+      (user-error "当前不在任何 Org 项目下"))
+
+    ;; 确保当前 entry 有标签 :transclusion:
+    (let ((tags (org-get-tags)))
+      (if (not (member "transclusion" tags))
+          (message "当前项没有标签 :transclusion:")
+        (let* ((path (org-roam-more-get-current-path)) ; 你需要自己实现或已有这个函数
+               (title-or-alias (car (last path)))
+               (original-id (org-entry-get nil "ORIGINAL-ID"))
+               (node (if original-id
+                         (org-roam-node-from-id original-id)
+                       (org-roam-node-from-title-or-alias title-or-alias)))
+               (current-content (org-roam-more-get-content-at-path path t t))) ;; 移除 heading 和 properties
+          (if (and node current-content)
+              (progn
+                (org-roam-more-set-node-content node current-content)
+                (message "已同步内容到 Org-roam 节点：%s" title-or-alias))
+            (message "未找到节点或内容为空：%s" title-or-alias)))))))
 (defun org-roam-more-sync-org-roam-content-to-transclusion ()
   "Sync content from org-roam nodes to transclusion entries.
 For all :transclusion: tagged entries, copies content from the
@@ -341,7 +389,10 @@ corresponding org-roam node while preserving headings and properties."
   (let ((transclusion-paths (org-roam-more-get-transclusion-paths)))
     (dolist (path transclusion-paths)
       (let* ((title-or-alias (car (last path)))
-             (node (org-roam-node-from-title-or-alias title-or-alias))
+             (original-id (org-entry-get nil "ORIGINAL-ID"))
+             (node (if original-id
+                       (org-roam-node-from-id original-id)
+                     (org-roam-node-from-title-or-alias title-or-alias)))
              (roam-content (org-roam-more-get-node-content node t))) ;; 移除 properties 和 heading
         (if (and node roam-content)
             (let ((new-content roam-content))
