@@ -116,7 +116,7 @@ Returns content as string."
           (setq content (buffer-substring-no-properties beg end))
           (when (or (null remove-properties) remove-properties)
             (setq content
-                  (replace-regexp-in-string ":PROPERTIES:\n(?:.*\n)*?:END:" "" content)))
+                  (replace-regexp-in-string ":PROPERTIES:\n\\(?:.*\n\\)*?:END:\n?" "" content)))
           (when (or (null remove-heading) remove-heading)
             (setq content
                   (mapconcat #'identity (cdr (split-string content "\n")) "\n"))))))
@@ -142,7 +142,11 @@ Does not automatically save the file."
               (subtree-end (progn (org-end-of-subtree t t) (point))))
           (goto-char properties-end)
           (delete-region properties-end subtree-end)
-          (insert (string-trim-right new-content) "\n"))))))
+          (insert (string-trim-right new-content) "\n")
+          ;; 保存文件，否则数据库不会更新
+          (save-buffer)
+          ;; 同步 org-roam 数据库，仅更新当前文件
+          (org-roam-db-update-file file))))))
 (defun org-roam-more-get-node-body (title-or-alias &optional remove-properties remove-heading)
   "Get body content of node matching TITLE-OR-ALIAS.
 When REMOVE-PROPERTIES is non-nil, strips :PROPERTIES: drawer.
