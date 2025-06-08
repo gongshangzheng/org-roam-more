@@ -21,10 +21,68 @@
 (require 'org)
 (require 'org-element)
 (require 'org-roam)
+
 (defcustom org-roam-more-transclusion-insert-content nil
   "If non-nil, `org-roam-more-insert-transclude' inserts full content instead of a #+transclude link."
   :type 'boolean
   :group 'org-roam-more)
+
+(defvar org-roam-more-insert-link-hook-enabled nil
+  "是否启用 org-roam-more-insert-current-node-link-into-daily 的 hook.")
+
+(defun org-roam-more-toggle-insert-link-hook (enable)
+  "根据 ENABLE 的值添加或移除 org-roam-more-insert-current-node-link-into-daily hook。"
+  (setq org-roam-more-insert-link-hook-enabled enable)
+  (if enable
+      (add-hook 'org-capture-before-finalize-hook #'org-roam-more-insert-current-node-link-into-daily)
+    (remove-hook 'org-capture-before-finalize-hook #'org-roam-more-insert-current-node-link-into-daily)))
+
+;; 使用举例：
+;; (org-roam-more-toggle-insert-link-hook t)   ;; 启用
+;; (org-roam-more-toggle-insert-link-hook nil) ;; 禁用
+;;; utils:
+(defun org-roam-more-link-make-string (link &optional description)
+  "Make a bracket link, consisting of LINK and DESCRIPTION.
+LINK is escaped with backslashes for inclusion in buffer."
+  (let* ((zero-width-space (string ?\x200B))
+	 (description
+	  (and (org-string-nw-p description)
+	       ;; Description cannot contain two consecutive square
+	       ;; brackets, or end with a square bracket.  To prevent
+	       ;; this, insert a zero width space character between
+	       ;; the brackets, or at the end of the description.
+	       (replace-regexp-in-string
+		"\\(]\\)\\(]\\)"
+		(concat "\\1" zero-width-space "\\2")
+		(replace-regexp-in-string "]\\'"
+					  (concat "\\&" zero-width-space)
+					  (org-trim description))))))
+    (if (not (org-string-nw-p link))
+        (or description
+            (error "Empty link"))
+      (format "[[%s]%s]"
+	      (org-link-escape link)
+	      (if description (format "[%s]" description) "")))))
+(defsubst org-roam-more--string-empty-p (string)
+  "Check whether STRING is empty."
+  (string= string ""))
+
+(defun org-roam-more-get-current-node-id-title ()
+  "在当前光标所在的 org headline 处，获取节点 ID 和标题。
+如果当前 buffer 不是 org-mode，返回 nil 并显示提示。
+如果没有得到 id 或标题，返回 nil。"
+  (if (not (derived-mode-p 'org-mode))
+      (progn
+        (message "当前不在 Org 文件中")
+        nil)
+    (let ((title (org-get-heading t t t t)) ; 纯标题，无标签，无todo，无脚注等
+          (id (org-id-get)))
+      (if (and title id (not (org-roam-more--string-empty-p title)) (not (org-roam-more--string-empty-p id)))
+          (cons id title)
+        (progn
+          (message "未能获取有效的 ID 或标题")
+          nil)))))
+
 (defun org-roam-more-get-current-path ()
   "返回当前 Org 条目的 OLP（Outline Path）.
 也就是标题层级列表。包含当前标题，
@@ -150,6 +208,8 @@ Returns content as string or nil if not found."
       (progn
         (message "没有找到名为 '%s' 的 node。" title-or-alias)
         nil))))
+
+;;; transclusion:
 (defun org-roam-more-insert-transclude (&optional insert-content)
   "Prompt for a title or alias, and insert a heading with properties and content from the Org-roam node.
 If INSERT-CONTENT is non-nil (interactively via prefix arg), include the full content; otherwise insert a #+transclude link."
@@ -180,6 +240,7 @@ If INSERT-CONTENT is non-nil (interactively via prefix arg), include the full co
       (if insert-content
           (insert node-content)
         (insert (format "#+transclude: [[id:%s]]\n" node-id))))))
+
 (defun org-roam-more-get-transclusion-entries (&optional remove-properties remove-heading)
   "Get all transclusion entries (headlines with :transclusion: tag) in current file.
 When REMOVE-PROPERTIES is non-nil, removes :PROPERTIES: blocks.
@@ -411,6 +472,77 @@ PATH 是标题字符串列表。找不到返回 nil。"
   (let ((pos (org-roam-more-get-headline-pos-by-path path)))
     (when pos
       (org-entry-get pos id-key))))
+;;; insert with id:
+(defvar org-roam-more--last-captured-id nil
+  "保存最近一次 org-roam capture 创建的节点 ID。")
+
+(defvar org-roam-more--last-captured-heading nil
+  "保存最近一次 org-roam capture 创建的节点标题。")
+
+(defun org-roam-more--update-last-captured-node ()
+  "在 org-capture 结束前更新最近创建的 org-roam node 的信息。"
+  (let* ((id-title (org-roam-more-get-current-node-id-title))
+         (id (car id-title))
+         (title (cdr id-title)))
+    (message "updating !")
+    (when (and id title)
+      (message (format "id: %s, title: %s" id title))
+      (setq org-roam-more--last-captured-id id)
+      (setq org-roam-more--last-captured-heading
+            title))))
+
+(defun org-roam-more--insert-link-after-capture ()
+  "在 org-roam capture 完成后插入链接，并移除 hook。"
+  ;; 移除所有临时 hook
+  (remove-hook 'org-capture-before-finalize-hook #'org-roam-more--update-last-captured-node)
+  (remove-hook 'org-capture-after-finalize-hook #'org-roam-more--insert-link-after-capture)
+  ;; 插入链接
+  (when (and org-roam-more--last-captured-id org-roam-more--last-captured-heading)
+    (insert (format "[[id:%s][%s]]"
+                    org-roam-more--last-captured-id
+                    org-roam-more--last-captured-heading)))
+  ;; 清空缓存
+  (setq org-roam-more--last-captured-id nil)
+  (setq org-roam-more--last-captured-heading nil))
+
+(defun org-roam-more-insert-new-node-with-id ()
+  "Prompt for a title, create a new roam node via capture, then insert a link to it."
+  (interactive)
+  (unless (derived-mode-p 'org-mode)
+    (user-error "This command only works in Org mode"))
+  ;; 添加临时 hook
+  (add-hook 'org-capture-before-finalize-hook #'org-roam-more--update-last-captured-node)
+  (add-hook 'org-capture-after-finalize-hook #'org-roam-more--insert-link-after-capture)
+  ;; 启动 capture 流程
+  (org-roam-capture))
+
+
+;;; sync to daily:
+(defun org-roam-more-insert-new-node-link-into-daily (id title)
+  "使用 org-capture 将 org-roam 新节点链接插入今天的日志。
+ID 和 TITLE 均通过参数传入。"
+  (let* ((link (org-roam-more-link-make-string (concat "id:" id) title))
+         (template-content (format "* %s\n  %%U" link))
+         (template `("x" "Insert org-roam node link into daily"
+                     entry
+                     (file+datetree "~/org/roam/daily/journal.org")
+                     ,template-content
+                     :immediate-finish t)))
+    (let ((org-capture-templates (list template)))
+      (org-capture nil "x"))))
+(defun org-roam-more-insert-current-node-link-into-daily ()
+  "获取当前节点的 ID 和标题，2 秒后插入当天日志。"
+  (interactive)
+  (let* ((id-title (org-roam-more-get-current-node-id-title))
+         (id (car id-title))
+         (title (cdr id-title)))
+    (when (and id title)
+      (run-at-time
+       "2 sec" nil
+       (let ((captured-id id)
+             (captured-title title))
+         (lambda ()
+           (org-roam-more-insert-new-node-link-into-daily captured-id captured-title)))))))
 
 (provide 'org-roam-more)
 ;;; org-roam-more.el ends here
