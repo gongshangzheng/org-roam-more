@@ -36,12 +36,25 @@
   (if enable
       (add-hook 'org-capture-before-finalize-hook #'org-roam-more-insert-current-node-link-into-daily)
     (remove-hook 'org-capture-before-finalize-hook #'org-roam-more-insert-current-node-link-into-daily)))
+(defun org-roam-more-set-source-property-from-node ()
+  "使用 `org-roam-node-read` 选择一个节点，并将其链接写入当前 entry 的 SOURCE 属性。"
+  (interactive)
+  (let* ((node (org-roam-node-read))
+         (source (org-roam-more-node-link node))) ;; 可自定义为 title/id/link 等
+    (org-set-property "SOURCE" source)
+    (message "已设置 SOURCE 属性为: %s" source)))
 
 ;; 使用举例：
 ;; (org-roam-more-toggle-insert-link-hook t)   ;; 启用
 ;; (org-roam-more-toggle-insert-link-hook nil) ;; 禁用
 ;;; utils:
-(defun org-roam-more-link-make-string (link &optional description)
+(defun org-roam-more-format-link (node)
+  "Return an Org-roam link string for NODE in the format [[id:...][title]]."
+  (let ((id (org-roam-node-id node))
+        (title (org-roam-node-title node)))
+    (format "[[id:%s][%s]]" id title)))
+
+(defun org-roam-more--link-make-string (link &optional description)
   "Make a bracket link, consisting of LINK and DESCRIPTION.
 LINK is escaped with backslashes for inclusion in buffer."
   (let* ((zero-width-space (string ?\x200B))
@@ -166,11 +179,12 @@ LINK is escaped with backslashes for inclusion in buffer."
           (setq content (buffer-substring-no-properties beg end))
           (when (or (null remove-properties) remove-properties)
             (setq content
-                  (replace-regexp-in-string ":PROPERTIES:\n\\(?:.*\n\\)*?:END:\n?" "" content)))
+                  (replace-regexp-in-string ":PROPERTIES:\\(?:.*\n\\)*?:END:\n?" "" content)))
           (when (or (null remove-heading) remove-heading)
             (setq content
                   (mapconcat #'identity (cdr (split-string content "\n")) "\n"))))))
     content))
+
 (defun org-roam-more-set-node-content (node new-content)
   "Replace the content of NODE with NEW-CONTENT while preserving heading and properties.
 Does not automatically save the file."
@@ -191,9 +205,11 @@ Does not automatically save the file."
           (delete-region properties-end subtree-end)
           (insert (string-trim-right new-content) "\n")
           ;; 保存文件，否则数据库不会更新
-          (save-buffer)
+          ;; (save-buffer)
           ;; 同步 org-roam 数据库，仅更新当前文件
-          (org-roam-db-update-file file))))))
+          ;; (org-roam-db-update-file file)
+          )))))
+
 (defun org-roam-more-get-node-body (title-or-alias &optional remove-properties remove-heading)
   "Get body content of node matching TITLE-OR-ALIAS.
 When REMOVE-PROPERTIES is non-nil, strips :PROPERTIES: drawer.
@@ -257,7 +273,7 @@ Returns list of entry contents."
                    (content (buffer-substring-no-properties begin end)))
               (when remove-properties
                 (setq content (replace-regexp-in-string
-                               ":PROPERTIES:\\(.\\|\n\\)*?:END:\n*" "" content)))
+                               ":PROPERTIES:\\(.\\|\n\\)*?:END:\n?" "" content)))
               (when remove-heading
                 (setq content (mapconcat #'identity (cdr (split-string content "\n")) "\n")))
               (push content results))))))
@@ -316,10 +332,11 @@ PATH 是一个标题组成的列表，从最外层 heading 到最内层。
                (content (buffer-substring-no-properties begin end)))
           (when remove-properties
             (setq content (replace-regexp-in-string
-                           ":PROPERTIES:\\(.\\|\n\\)*?:END:\n*" "" content)))
+                           ":PROPERTIES:\\(.\\|\n\\)*?:END:\n?" "" content)))
           (when remove-heading
             (setq content (mapconcat #'identity (cdr (split-string content "\n")) "\n")))
           content)))))
+
 (defun org-roam-more-set-content-at-path (path new-content &optional filepath)
   "Set content at PATH (list of heading titles) to NEW-CONTENT.
 FILEPATH defaults to current buffer's file.
@@ -428,6 +445,24 @@ corresponding org-roam node while preserving headings and properties."
                 (org-roam-more-set-node-content node current-content)
                 (message "已同步内容到 Org-roam 节点：%s" title-or-alias))
             (message "未找到节点或内容为空：%s" title-or-alias)))))))
+(defun org-roam-more-sync-transclusion-content-auto ()
+  "根据当前条目是否有 :transclusion: 标签，选择同步函数。
+有标签调用同步当前条目内容函数，
+无标签调用全局同步所有 transclusion 条目的函数。"
+  (interactive)
+  (if (derived-mode-p 'org-mode)
+      (save-excursion
+        (if (org-before-first-heading-p)
+            ;; 如果不在任何条目，调用全局同步
+            (progn
+              (message "不在任何条目，执行全局同步")
+              (org-roam-more-sync-transclusion-content-to-org-roam))
+          ;; 在条目内，检查标签
+          (let ((tags (org-get-tags)))
+            (if (member "transclusion" tags)
+                (org-roam-more-sync-current-transclusion-content-to-org-roam)
+              (org-roam-more-sync-org-roam-content-to-transclusion)))))
+    (user-error "本命令只能在 Org mode 下执行")))
 
 (defun org-roam-more-sync-org-roam-content-to-transclusion ()
   "Sync content from org-roam nodes to transclusion entries.
@@ -505,23 +540,44 @@ PATH 是标题字符串列表。找不到返回 nil。"
   (setq org-roam-more--last-captured-id nil)
   (setq org-roam-more--last-captured-heading nil))
 
-(defun org-roam-more-insert-new-node-with-id ()
-  "Prompt for a title, create a new roam node via capture, then insert a link to it."
+;; (defun org-roam-more-insert-new-node-with-id ()
+;;   "Prompt for a title, create a new roam node via capture, then insert a link to it."
+;;   (interactive)
+;;   (unless (derived-mode-p 'org-mode)
+;;     (user-error "This command only works in Org mode"))
+;;   ;; 添加临时 hook
+;;   (add-hook 'org-capture-before-finalize-hook #'org-roam-more--update-last-captured-node)
+;;   (add-hook 'org-capture-after-finalize-hook #'org-roam-more--insert-link-after-capture)
+;;   ;; 启动 capture 流程
+;;   (org-roam-capture))
+
+(defun org-roam-more-insert-new-node-with-id (&optional goto keys &key filter-fn templates info)
+  "Prompt for a title, create a new roam node via capture if needed, then insert a link to it."
   (interactive)
   (unless (derived-mode-p 'org-mode)
     (user-error "This command only works in Org mode"))
-  ;; 添加临时 hook
-  (add-hook 'org-capture-before-finalize-hook #'org-roam-more--update-last-captured-node)
-  (add-hook 'org-capture-after-finalize-hook #'org-roam-more--insert-link-after-capture)
-  ;; 启动 capture 流程
-  (org-roam-capture))
 
+  ;; 让用户选择已有节点或输入新标题
+  (let* ((node (org-roam-node-read nil filter-fn)))
+    (if (org-roam-node-file node)
+        ;; 如果已有文件路径，说明 node 存在，直接插入链接
+        (insert (org-roam-more-format-link node))
+      ;; 否则创建新节点（启动 capture 流程）
+      (progn
+        (add-hook 'org-capture-before-finalize-hook #'org-roam-more--update-last-captured-node)
+        (add-hook 'org-capture-after-finalize-hook #'org-roam-more--insert-link-after-capture)
+         (org-roam-capture- :goto goto
+                       :info info
+                       :keys keys
+                       :templates templates
+                       :node node
+                       :props '(:immediate-finish nil))))))
 
 ;;; sync to daily:
 (defun org-roam-more-insert-new-node-link-into-daily (id title)
   "使用 org-capture 将 org-roam 新节点链接插入今天的日志。
 ID 和 TITLE 均通过参数传入。"
-  (let* ((link (org-roam-more-link-make-string (concat "id:" id) title))
+  (let* ((link (org-roam-more--link-make-string (concat "id:" id) title))
          (template-content (format "* %s\n  %%U" link))
          (template `("x" "Insert org-roam node link into daily"
                      entry
