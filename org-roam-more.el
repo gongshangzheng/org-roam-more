@@ -36,6 +36,7 @@
   (if enable
       (add-hook 'org-capture-before-finalize-hook #'org-roam-more-insert-current-node-link-into-daily)
     (remove-hook 'org-capture-before-finalize-hook #'org-roam-more-insert-current-node-link-into-daily)))
+
 (defun org-roam-more-set-source-property-from-node ()
   "使用 `org-roam-node-read` 选择一个节点，并将其链接写入当前 entry 的 SOURCE 属性。"
   (interactive)
@@ -48,6 +49,35 @@
 ;; (org-roam-more-toggle-insert-link-hook t)   ;; 启用
 ;; (org-roam-more-toggle-insert-link-hook nil) ;; 禁用
 ;;; utils:
+
+(defun org-roam-more-insert-subheading (&optional heading)
+  "Insert a subheading at current point.
+In Org mode uses asterisks, in Markdown mode uses hashes.
+If HEADING is not provided, prompt for it."
+  (interactive)
+  (unless (derived-mode-p 'org-mode 'markdown-mode)
+    (user-error "Not in Org or Markdown mode"))
+
+  (let* ((current-level
+          (cond ((derived-mode-p 'org-mode)
+                 (or (save-excursion
+                       (when (re-search-backward "^\\(\\*+\\) " nil t)
+                         (length (match-string 1))))
+                     1))
+                ((derived-mode-p 'markdown-mode)
+                 (or (save-excursion
+                       (when (re-search-backward "^\\(#+\\) " nil t)
+                         (length (match-string 1))))
+                     1))))
+         (subheading-level (1+ current-level))
+         (heading-prefix
+          (cond ((derived-mode-p 'org-mode) (make-string subheading-level ?*))
+                ((derived-mode-p 'markdown-mode) (make-string subheading-level ?#)))))
+
+    (unless heading
+      (setq heading (read-string "Subheading: ")))
+    (insert heading-prefix " " heading "\n")))
+
 (defun org-roam-more-format-link (node)
   "Return an Org-roam link string for NODE in the format [[id:...][title]]."
   (let ((id (org-roam-node-id node))
@@ -226,36 +256,41 @@ Returns content as string or nil if not found."
         nil))))
 
 ;;; transclusion:
-(defun org-roam-more-insert-transclude (&optional insert-content)
+(defun org-roam-more-insert-transclude (&optional insert-content node-id node-title node-content)
   "Prompt for a title or alias, and insert a heading with properties and content from the Org-roam node.
-If INSERT-CONTENT is non-nil (interactively via prefix arg), include the full content; otherwise insert a #+transclude link."
+If INSERT-CONTENT is non-nil (interactively via prefix arg), include the full content; otherwise insert a #+transclude link.
+When NODE-ID and NODE-CONTENT are both provided, use them directly instead of prompting for a node."
   (interactive "P")
-  (let* ((node (org-roam-node-read)))
-    (unless node
-      (user-error "未找到节点"))
-    (unless (derived-mode-p 'org-mode)
-      (user-error "This command only works in Org mode"))
-    (unless (bolp) (insert "\n"))
+  (unless (derived-mode-p 'org-mode)
+    (user-error "This command only works in Org mode"))
+  (unless (bolp) (insert "\n"))
 
-    (let* ((heading (org-roam-node-title node))
-           (node-id (org-roam-node-id node))
-           (file-path (org-roam-node-file node))
-           (insert-content (or insert-content org-roam-more-transclusion-insert-content))
-           (node-content (when insert-content
-                           (org-roam-more-get-node-content node t t)))) ;; remove heading and properties
-      ;; Insert new heading
-      (insert (concat "** " heading " :transclusion:\n"))
-      ;; Insert properties
-      (insert ":PROPERTIES:\n")
-      (insert (format ":ORIGINAL-HEADING: %s\n" heading))
-      (insert (format ":ORIGINAL-ID: %s\n" node-id))
-      (insert (format ":ORIGINAL-FILE: [[file:%s]]\n" file-path))
-      (insert (format ":ORIGINAL-NODE-LINK: [[id:%s][%s]]\n" node-id heading)) ;; Org-roam style link
-      (insert ":END:\n")
-      ;; Insert content or transclude link
-      (if insert-content
-          (insert node-content)
-        (insert (format "#+transclude: [[id:%s]]\n" node-id))))))
+  (let* ((node (or (when node-id
+                  (org-roam-node-from-id node-id))
+                (org-roam-node-read)))
+         (heading (or node-title                          ; 1. 直接提供的标题
+                      (and node (org-roam-node-title node)) ; 2. 从node对象获取
+                      (and node-id                         ; 3. 通过ID查找
+                           (org-roam-node-title (org-roam-node-from-id node-id)))
+                      "Unknown"))                         ; 4. 最终默认值
+         (node-id (or node-id (org-roam-node-id node)))
+         (insert-content (or insert-content org-roam-more-transclusion-insert-content))
+         (node-content (cond
+                       (node-content node-content)
+                       (insert-content
+                        (org-roam-more-get-node-content node t t))))) ;; remove heading and properties
+    ;; Insert new heading
+    (org-roam-more-insert-subheading (concat heading " :transclusion:"))
+    ;; Insert properties
+    (insert ":PROPERTIES:\n")
+    (insert (format ":ORIGINAL-HEADING: %s\n" heading))
+    (insert (format ":ORIGINAL-ID: %s\n" node-id))
+    (insert (format ":ORIGINAL-NODE-LINK: [[id:%s][%s]]\n" node-id heading))
+    (insert ":END:\n")
+    ;; Insert content or transclude link
+    (if insert-content
+        (when node-content (insert node-content))
+      (insert (format "#+transclude: [[id:%s]]\n" node-id)))))
 
 (defun org-roam-more-get-transclusion-entries (&optional remove-properties remove-heading)
   "Get all transclusion entries (headlines with :transclusion: tag) in current file.
@@ -526,32 +561,25 @@ PATH 是标题字符串列表。找不到返回 nil。"
       (setq org-roam-more--last-captured-heading
             title))))
 
-(defun org-roam-more--insert-link-after-capture ()
-  "在 org-roam capture 完成后插入链接，并移除 hook。"
+(defun org-roam-more--insert-link-after-capture (&optional use-transclusion)
+  "在 org-roam capture 完成后插入链接，并移除 hook。
+当 USE-TRANSCLUSION 非 nil 时，使用 #+transclude 语法。"
   ;; 移除所有临时 hook
   (remove-hook 'org-capture-before-finalize-hook #'org-roam-more--update-last-captured-node)
   (remove-hook 'org-capture-after-finalize-hook #'org-roam-more--insert-link-after-capture)
   ;; 插入链接
   (when (and org-roam-more--last-captured-id org-roam-more--last-captured-heading)
-    (insert (format "[[id:%s][%s]]"
-                    org-roam-more--last-captured-id
-                    org-roam-more--last-captured-heading)))
+    (if use-transclusion
+        (org-roam-more-insert-transclude nil org-roam-more--last-captured-id
+                                         org-roam-more--last-captured-heading)
+      (insert (format "[[id:%s][%s]]"
+                      org-roam-more--last-captured-id
+                      org-roam-more--last-captured-heading))))
   ;; 清空缓存
   (setq org-roam-more--last-captured-id nil)
   (setq org-roam-more--last-captured-heading nil))
 
-;; (defun org-roam-more-insert-new-node-with-id ()
-;;   "Prompt for a title, create a new roam node via capture, then insert a link to it."
-;;   (interactive)
-;;   (unless (derived-mode-p 'org-mode)
-;;     (user-error "This command only works in Org mode"))
-;;   ;; 添加临时 hook
-;;   (add-hook 'org-capture-before-finalize-hook #'org-roam-more--update-last-captured-node)
-;;   (add-hook 'org-capture-after-finalize-hook #'org-roam-more--insert-link-after-capture)
-;;   ;; 启动 capture 流程
-;;   (org-roam-capture))
-
-(defun org-roam-more-insert-new-node-with-id (&optional goto keys &key filter-fn templates info)
+(defun org-roam-more-insert-new-node-with-id (&optional goto keys use-transclusion &key filter-fn templates info)
   "Prompt for a title, create a new roam node via capture if needed, then insert a link to it."
   (interactive)
   (unless (derived-mode-p 'org-mode)
@@ -561,11 +589,14 @@ PATH 是标题字符串列表。找不到返回 nil。"
   (let* ((node (org-roam-node-read nil filter-fn)))
     (if (org-roam-node-file node)
         ;; 如果已有文件路径，说明 node 存在，直接插入链接
-        (insert (org-roam-more-format-link node))
+        (if use-transclusion
+            (org-roam-more-insert-transclude nil (org-roam-node-id node)
+                                    (org-roam-node-title node))
+            (insert (org-roam-more-format-link node)))
       ;; 否则创建新节点（启动 capture 流程）
       (progn
         (add-hook 'org-capture-before-finalize-hook #'org-roam-more--update-last-captured-node)
-        (add-hook 'org-capture-after-finalize-hook #'org-roam-more--insert-link-after-capture)
+        (add-hook 'org-capture-after-finalize-hook (lambda () (org-roam-more--insert-link-after-capture use-transclusion)))
          (org-roam-capture- :goto goto
                        :info info
                        :keys keys
