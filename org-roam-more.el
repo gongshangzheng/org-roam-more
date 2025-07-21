@@ -50,6 +50,12 @@
 ;; (org-roam-more-toggle-insert-link-hook nil) ;; 禁用
 ;;; utils:
 
+(defun org-roam-more-node-link (node)
+  "Return an Org link string for the given NODE."
+  (format "[[id:%s][%s]]"
+          (org-roam-node-id node)
+          (org-roam-node-title node)))
+
 (defun org-roam-more-insert-subheading (&optional heading)
   "Insert a subheading at current point.
 In Org mode uses asterisks, in Markdown mode uses hashes.
@@ -73,6 +79,22 @@ If HEADING is not provided, prompt for it."
          (heading-prefix
           (cond ((derived-mode-p 'org-mode) (make-string subheading-level ?*))
                 ((derived-mode-p 'markdown-mode) (make-string subheading-level ?#)))))
+
+    (unless heading
+      (setq heading (read-string "Subheading: ")))
+    (insert heading-prefix " " heading "\n")))
+
+(defun org-roam-more-insert-heading-with-level (level &optional heading)
+  "Insert a subheading at current point.
+In Org mode uses asterisks, in Markdown mode uses hashes.
+If HEADING is not provided, prompt for it."
+  (interactive)
+  (unless (derived-mode-p 'org-mode 'markdown-mode)
+    (user-error "Not in Org or Markdown mode"))
+
+  (let ((heading-prefix
+          (cond ((derived-mode-p 'org-mode) (make-string level ?*))
+                ((derived-mode-p 'markdown-mode) (make-string level ?#)))))
 
     (unless heading
       (setq heading (read-string "Subheading: ")))
@@ -265,22 +287,20 @@ When NODE-ID and NODE-CONTENT are both provided, use them directly instead of pr
     (user-error "This command only works in Org mode"))
   (unless (bolp) (insert "\n"))
 
-  (let* ((node (or (when node-id
-                  (org-roam-node-from-id node-id))
-                (org-roam-node-read)))
+  (let* ((node (unless node-id
+                 (org-roam-node-read)))
          (heading (or node-title                          ; 1. 直接提供的标题
-                      (and node (org-roam-node-title node)) ; 2. 从node对象获取
-                      (and node-id                         ; 3. 通过ID查找
-                           (org-roam-node-title (org-roam-node-from-id node-id)))
+                      (org-roam-node-title node) ; 2. 从node对象获取
+                         ; 3. 通过ID查找
+                      (org-roam-node-title (org-roam-node-from-id node-id))
                       "Unknown"))                         ; 4. 最终默认值
          (node-id (or node-id (org-roam-node-id node)))
          (insert-content (or insert-content org-roam-more-transclusion-insert-content))
-         (node-content (cond
-                       (node-content node-content)
-                       (insert-content
-                        (org-roam-more-get-node-content node t t))))) ;; remove heading and properties
+         (node-content (or node-content
+                           (when (and insert-content node)
+                             (org-roam-more-get-node-content node t t))))) ;; remove heading and properties
     ;; Insert new heading
-    (org-roam-more-insert-subheading (concat heading " :transclusion:"))
+    (org-roam-more-insert-heading-with-level 2 (concat heading " :transclusion:"))
     ;; Insert properties
     (insert ":PROPERTIES:\n")
     (insert (format ":ORIGINAL-HEADING: %s\n" heading))
@@ -554,9 +574,8 @@ PATH 是标题字符串列表。找不到返回 nil。"
   (let* ((id-title (org-roam-more-get-current-node-id-title))
          (id (car id-title))
          (title (cdr id-title)))
-    (message "updating !")
     (when (and id title)
-      (message (format "id: %s, title: %s" id title))
+      ;; (message (format "id: %s, title: %s" id title))
       (setq org-roam-more--last-captured-id id)
       (setq org-roam-more--last-captured-heading
             title))))
@@ -568,6 +587,7 @@ PATH 是标题字符串列表。找不到返回 nil。"
   (remove-hook 'org-capture-before-finalize-hook #'org-roam-more--update-last-captured-node)
   (remove-hook 'org-capture-after-finalize-hook #'org-roam-more--insert-link-after-capture)
   ;; 插入链接
+  ;; (message "=== use-transclusion: %S ====" use-transclusion)
   (when (and org-roam-more--last-captured-id org-roam-more--last-captured-heading)
     (if use-transclusion
         (org-roam-more-insert-transclude nil org-roam-more--last-captured-id
@@ -591,18 +611,19 @@ PATH 是标题字符串列表。找不到返回 nil。"
         ;; 如果已有文件路径，说明 node 存在，直接插入链接
         (if use-transclusion
             (org-roam-more-insert-transclude nil (org-roam-node-id node)
-                                    (org-roam-node-title node))
-            (insert (org-roam-more-format-link node)))
+                                             (org-roam-node-title node))
+          (insert (org-roam-more-format-link node)))
       ;; 否则创建新节点（启动 capture 流程）
       (progn
+        ;; (message "Node 未找到！")
         (add-hook 'org-capture-before-finalize-hook #'org-roam-more--update-last-captured-node)
         (add-hook 'org-capture-after-finalize-hook (lambda () (org-roam-more--insert-link-after-capture use-transclusion)))
-         (org-roam-capture- :goto goto
-                       :info info
-                       :keys keys
-                       :templates templates
-                       :node node
-                       :props '(:immediate-finish nil))))))
+        (org-roam-capture- :goto goto
+                           :info info
+                           :keys keys
+                           :templates templates
+                           :node node
+                           :props '(:immediate-finish nil))))))
 
 ;;; sync to daily:
 (defun org-roam-more-insert-new-node-link-into-daily (id title)
