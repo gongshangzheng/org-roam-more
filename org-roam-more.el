@@ -560,8 +560,8 @@ and corresponding org-roam node content. Updates both after ediff completes."
                 (add-hook 'ediff-after-quit-hook-internal hook-fn))
               (ediff-buffers buf-a buf-b))
           (message "未找到路径或内容为空：%s" path))))))
-(defun org-roam-more-sync-transclusion-content-to-org-roam ()
-  "将所有 transclusion 条目的内容同步到其对应的 org-roam 节点。
+(defun org-roam-more-transclusion-push-all ()
+  "将当前文件所有 transclusion 条目的内容推送到其对应的 org-roam 节点。
 对每个 :transclusion: 标签的条目：
 1. 检查是否有 transclusion 标签
 2. 检查内容是否与原 node 一致
@@ -604,9 +604,10 @@ and corresponding org-roam node content. Updates both after ediff completes."
                     (org-roam-more-set-node-content node current-content)
                     (message "已同步到 Org-roam 节点：%s" (car (last path)))
                     (setq updated-count (1+ updated-count))))))))))
-    (message "同步完成：更新 %d 个，跳过 %d 个" updated-count skipped-count)))
-(defun org-roam-more-sync-current-transclusion-content-to-org-roam ()
-  "将当前 transclusion 条目的内容同步到其对应的 org-roam 节点。
+    (message "推送完成：更新 %d 个，跳过 %d 个" updated-count skipped-count)))
+
+(defun org-roam-more-transclusion-push-current ()
+  "将当前 transclusion 条目的内容推送到其对应的 org-roam 节点。
 1. 检查当前条目是否有 :transclusion: 标签
 2. 检查内容是否与原 node 一致
 3. 如果一致则提示跳过，不一致则更新
@@ -649,28 +650,10 @@ and corresponding org-roam node content. Updates both after ediff completes."
           (message "内容一致，无需更新")
         ;; 内容不一致，更新原 node
         (org-roam-more-set-node-content node current-content)
-        (message "已同步到 Org-roam 节点：%s" (org-roam-node-title node))))))
-(defun org-roam-more-sync-transclusion-content-auto ()
-  "根据当前条目是否有 :transclusion: 标签，选择同步函数。
-有标签调用同步当前条目内容函数，
-无标签调用全局同步所有 transclusion 条目的函数。"
-  (interactive)
-  (if (derived-mode-p 'org-mode)
-      (save-excursion
-        (if (org-before-first-heading-p)
-            ;; 如果不在任何条目，调用全局同步
-            (progn
-              (message "不在任何条目，执行全局同步")
-              (org-roam-more-sync-transclusion-content-to-org-roam))
-          ;; 在条目内，检查标签
-          (let ((tags (org-get-tags)))
-            (if (member "transclusion" tags)
-                (org-roam-more-sync-current-transclusion-content-to-org-roam)
-              (org-roam-more-sync-org-roam-content-to-transclusion)))))
-    (user-error "本命令只能在 Org mode 下执行")))
+        (message "已推送到 Org-roam 节点：%s" (org-roam-node-title node))))))
 
-(defun org-roam-more-sync-org-roam-content-to-transclusion ()
-  "将原 org-roam 节点的内容同步到所有 transclusion 条目。
+(defun org-roam-more-transclusion-pull-all ()
+  "将当前文件所有 transclusion 条目从对应的 org-roam 节点拉取内容。
 对每个 :transclusion: 标签的条目：
 1. 检查是否有 transclusion 标签
 2. 检查内容是否与原 node 一致
@@ -711,12 +694,12 @@ and corresponding org-roam node content. Updates both after ediff completes."
                         (setq skipped-count (1+ skipped-count)))
                     ;; 内容不一致，用原 node 内容更新当前 transclusion
                     (org-roam-more-set-content-at-path path original-content)
-                    (message "已从 Org-roam 节点同步到：%s" (car (last path)))
+                    (message "已从 Org-roam 节点拉取到：%s" (car (last path)))
                     (setq updated-count (1+ updated-count))))))))))
-    (message "同步完成：更新 %d 个，跳过 %d 个" updated-count skipped-count)))
+    (message "拉取完成：更新 %d 个，跳过 %d 个" updated-count skipped-count)))
 
-(defun org-roam-more-sync-org-roam-content-to-current-transclusion ()
-  "将原 org-roam 节点的内容同步到当前 transclusion 条目。
+(defun org-roam-more-transclusion-pull-current ()
+  "将当前 transclusion 条目从对应的 org-roam 节点拉取内容。
 1. 检查当前条目是否有 :transclusion: 标签
 2. 检查内容是否与原 node 一致
 3. 如果一致则提示跳过，不一致则更新
@@ -760,7 +743,37 @@ and corresponding org-roam node content. Updates both after ediff completes."
           (message "内容一致，无需更新")
         ;; 内容不一致，用原 node 内容更新当前 transclusion
         (org-roam-more-set-content-at-path path original-content)
-        (message "已从 Org-roam 节点同步到当前 transclusion")))))
+        (message "已从 Org-roam 节点拉取到当前 transclusion")))))
+
+(defun org-roam-more-transclusion-push ()
+  "智能推送 transclusion 内容到原 org-roam 节点。
+- 如果光标在 transclusion 条目内：推送当前条目到原 node
+- 如果光标在条目外或非 transclusion 条目：推送当前文件所有 transclusion 到对应的原 node"
+  (interactive)
+  (unless (derived-mode-p 'org-mode)
+    (user-error "当前不在 Org 文件中"))
+  
+  (if (and (not (org-before-first-heading-p))
+           (org-roam-more-is-transclusion-p))
+      ;; 在 transclusion 条目内
+      (org-roam-more-transclusion-push-current)
+    ;; 在条目外或非 transclusion 条目
+    (org-roam-more-transclusion-push-all)))
+
+(defun org-roam-more-transclusion-pull ()
+  "智能从原 org-roam 节点拉取内容到 transclusion。
+- 如果光标在 transclusion 条目内：从原 node 拉取到当前条目
+- 如果光标在条目外或非 transclusion 条目：从对应原 node 拉取到当前文件所有 transclusion"
+  (interactive)
+  (unless (derived-mode-p 'org-mode)
+    (user-error "当前不在 Org 文件中"))
+  
+  (if (and (not (org-before-first-heading-p))
+           (org-roam-more-is-transclusion-p))
+      ;; 在 transclusion 条目内
+      (org-roam-more-transclusion-pull-current)
+    ;; 在条目外或非 transclusion 条目
+    (org-roam-more-transclusion-pull-all)))
 
 (defun org-roam-more-get-headline-pos-by-path (path)
   "在当前 buffer 中，根据 PATH(标题列表)查找对应 headline 的位置。
