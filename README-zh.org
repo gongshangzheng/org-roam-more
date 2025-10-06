@@ -1,0 +1,333 @@
+#+TITLE: org-roam-more - Org-Roam 增强功能
+#+AUTHOR: gongshangzheng
+#+DATE: 2025-05-07
+#+LANGUAGE: zh-CN
+
+* 概述
+
+=org-roam-more= 为 [[https://www.orgroam.com/][org-roam]] 提供增强功能，包括：
+
+- 📝 *Transclusion 管理* - 嵌入并同步其他节点的内容
+- 📦 *节点内容操作* - 强大的节点内容读写功能
+- 🔗 *增强的节点创建* - 智能节点插入与自动链接
+- 📅 *日记集成* - 自动记录到日记笔记
+- 🛠️  *实用工具* - 丰富的 org-roam 辅助函数集
+
+* 特性
+
+** 🔄 Transclusion 系统
+
+将一个节点的内容插入到另一个位置，同时保持双向同步。
+
+- 插入 transclusion 时保留原始标题层级
+- 推送/拉取同步（双向）
+- 内容一致性检查
+- 使用 ediff 的可视化对比
+- 基于标签的 transclusion 追踪
+
+** 📦 节点内容管理
+
+- 获取和设置节点内容，可选择保留/移除属性
+- 基于路径的内容操作（使用大纲路径）
+- 在现有节点下创建子节点
+- 程序化设置节点属性
+
+** 🔗 智能节点创建
+
+- 创建或选择节点并自动插入链接
+- 支持普通链接和 transclusion
+- 基于 hook 的捕获工作流
+- 过滤器和模板自定义
+
+** 📅 日记集成
+
+- 自动将新节点插入日记
+- 可配置的 hook 系统
+- 手动插入当前节点
+
+* 安装
+
+** 使用 straight.el
+
+#+BEGIN_SRC elisp
+(straight-use-package
+ '(org-roam-more :type git :host github :repo "gongshangzheng/org-roam-more"))
+#+END_SRC
+
+** 使用 use-package
+
+#+BEGIN_SRC elisp
+(use-package org-roam-more
+  :after org-roam
+  :load-path "/path/to/org-roam-more/"
+  :config
+  (require 'org-roam-more))
+#+END_SRC
+
+* 快速开始
+
+** 基本 Transclusion 工作流
+
+#+BEGIN_SRC elisp
+;; 1. 插入 transclusion
+M-x org-roam-more-insert-transclude
+
+;; 2. 编辑转写的内容...
+
+;; 3. 将更改推送回原节点
+M-x org-roam-more-transclusion-push
+
+;; 或者从原节点拉取更新
+M-x org-roam-more-transclusion-pull
+#+END_SRC
+
+** 启用日记集成
+
+#+BEGIN_SRC elisp
+;; 启用自动日记插入
+(org-roam-more-toggle-insert-link-hook t)
+
+;; 禁用
+(org-roam-more-toggle-insert-link-hook nil)
+#+END_SRC
+
+* 模块结构
+
+包组织为专注的模块：
+
+- =org-roam-more-utils.el= - 工具函数（链接、路径、标题）
+- =org-roam-more-node.el= - 节点内容操作
+- =org-roam-more-transclusion.el= - Transclusion 管理
+- =org-roam-more-capture.el= - 节点创建和插入
+- =org-roam-more-daily.el= - 日记集成
+- =org-roam-more.el= - 主入口点（加载所有模块）
+
+* 核心函数
+
+** Transclusion
+
+| 函数 | 描述 |
+|------|------|
+| =org-roam-more-insert-transclude= | 在光标处插入 transclusion |
+| =org-roam-more-is-transclusion-p= | 检查当前条目是否为 transclusion |
+| =org-roam-more-transclusion-content-equal-p= | 检查内容是否一致 |
+| =org-roam-more-transclusion-push= | 智能推送（当前或全部） |
+| =org-roam-more-transclusion-pull= | 智能拉取（当前或全部） |
+| =org-roam-more-transclusion-push-current= | 推送当前 transclusion |
+| =org-roam-more-transclusion-push-all= | 推送文件中所有 transclusion |
+| =org-roam-more-transclusion-pull-current= | 拉取到当前 transclusion |
+| =org-roam-more-transclusion-pull-all= | 拉取到所有 transclusion |
+| =org-roam-more-compare-transclusion-and-roam-content= | 使用 ediff 对比 |
+
+** 节点操作
+
+| 函数 | 描述 |
+|------|------|
+| =org-roam-more-get-node-content= | 获取节点内容 |
+| =org-roam-more-set-node-content= | 设置节点内容（保留标题/属性） |
+| =org-roam-more-get-node-body= | 交互式获取节点正文 |
+| =org-roam-more-get-content-at-path= | 根据大纲路径获取内容 |
+| =org-roam-more-set-content-at-path= | 根据大纲路径设置内容 |
+| =org-roam-more-capture-under-node= | 在现有节点下创建子节点 |
+| =org-roam-more-set-source-property-from-node= | 设置 SOURCE 属性 |
+
+** 节点创建
+
+| 函数 | 描述 |
+|------|------|
+| =org-roam-more-insert-new-node-with-id= | 创建/选择节点并插入链接 |
+
+** 日记集成
+
+| 函数 | 描述 |
+|------|------|
+| =org-roam-more-toggle-insert-link-hook= | 启用/禁用自动插入 hook |
+| =org-roam-more-insert-current-node-link-into-daily= | 将当前节点插入日记 |
+
+** 工具函数
+
+| 函数 | 描述 |
+|------|------|
+| =org-roam-more-node-link= | 生成节点链接 |
+| =org-roam-more-format-link= | 格式化节点链接 |
+| =org-roam-more-insert-subheading= | 插入子标题 |
+| =org-roam-more-insert-heading-with-level= | 插入指定层级标题 |
+| =org-roam-more-get-current-node-id-title= | 获取当前节点 ID 和标题 |
+| =org-roam-more-get-current-path= | 获取当前大纲路径 |
+| =org-roam-more-heading-to-olp= | 标题转大纲路径 |
+| =org-roam-more-subheadings-under-olp= | 获取路径下的子标题 |
+
+* 使用示例
+
+** Transclusion 管理
+
+#+BEGIN_SRC elisp
+;; 插入 transclusion
+(org-roam-more-insert-transclude)
+
+;; 检查当前条目是否为 transclusion
+(org-roam-more-is-transclusion-p) ;; => t 或 nil
+
+;; 检查内容是否与原节点匹配
+(org-roam-more-transclusion-content-equal-p) ;; => t 或 nil
+
+;; 智能推送 - 自动检测上下文
+;; - 如果光标在 transclusion 条目内：推送当前条目
+;; - 否则：推送文件中所有 transclusion
+(org-roam-more-transclusion-push)
+
+;; 智能拉取 - 自动检测上下文
+;; - 如果光标在 transclusion 条目内：拉取到当前条目
+;; - 否则：拉取到所有 transclusion
+(org-roam-more-transclusion-pull)
+
+;; 手动控制
+(org-roam-more-transclusion-push-current) ;; 推送当前条目
+(org-roam-more-transclusion-push-all)     ;; 推送所有条目
+(org-roam-more-transclusion-pull-current) ;; 拉取到当前
+(org-roam-more-transclusion-pull-all)     ;; 拉取到全部
+
+;; 使用 ediff 对比并更新两侧
+(org-roam-more-compare-transclusion-and-roam-content)
+#+END_SRC
+
+** 节点内容操作
+
+#+BEGIN_SRC elisp
+;; 获取节点内容
+(let* ((node (org-roam-node-read))
+       (content (org-roam-more-get-node-content node t))) ;; t = 移除属性
+  (message "内容: %s" content))
+
+;; 设置节点内容（保留标题和属性）
+(let ((node (org-roam-node-read))
+      (new-content "这是新内容。"))
+  (org-roam-more-set-node-content node new-content))
+
+;; 根据路径获取内容
+(let ((path '("顶层" "第二层" "目标标题")))
+  (org-roam-more-get-content-at-path path t)) ;; => 内容字符串
+
+;; 根据路径设置内容
+(let ((path '("顶层" "第二层" "目标标题"))
+      (new-content "更新的内容。"))
+  (org-roam-more-set-content-at-path path new-content))
+#+END_SRC
+
+** 创建节点
+
+#+BEGIN_SRC elisp
+;; 在现有节点下创建子节点
+(org-roam-more-capture-under-node)
+
+;; 插入新节点并自动创建链接
+(org-roam-more-insert-new-node-with-id)
+
+;; 插入新节点作为 transclusion
+(org-roam-more-insert-new-node-with-id nil nil t)
+#+END_SRC
+
+** 日记集成
+
+#+BEGIN_SRC elisp
+;; 启用自动插入到日记
+(org-roam-more-toggle-insert-link-hook t)
+
+;; 手动将当前节点插入日记
+(org-roam-more-insert-current-node-link-into-daily)
+
+;; 禁用自动插入
+(org-roam-more-toggle-insert-link-hook nil)
+#+END_SRC
+
+* 配置
+
+** 自定义 Transclusion 行为
+
+#+BEGIN_SRC elisp
+;; 插入完整内容而不是 #+transclude 链接（不推荐）
+(setq org-roam-more-transclusion-insert-content nil)
+#+END_SRC
+
+** 键绑定示例
+
+#+BEGIN_SRC elisp
+(with-eval-after-load 'org-roam-more
+  (define-key org-mode-map (kbd "C-c n t i") #'org-roam-more-insert-transclude)
+  (define-key org-mode-map (kbd "C-c n t p") #'org-roam-more-transclusion-push)
+  (define-key org-mode-map (kbd "C-c n t u") #'org-roam-more-transclusion-pull)
+  (define-key org-mode-map (kbd "C-c n t c") #'org-roam-more-compare-transclusion-and-roam-content)
+  (define-key org-mode-map (kbd "C-c n c") #'org-roam-more-capture-under-node))
+#+END_SRC
+
+* Transclusion 工作原理
+
+1. *插入*：当你插入 transclusion 时，源节点的完整内容（包括其标题结构）会被复制到当前位置。
+
+2. *标记*：转写的内容会被标记：
+   - 顶层标题上有 =:transclusion:= 标签
+   - 属性：=ORIGINAL-ID=、=ORIGINAL-HEADING=、=ORIGINAL-NODE-LINK=
+
+3. *同步*：
+   - *Push（推送）*：从 transclusion 复制内容到原节点
+   - *Pull（拉取）*：从原节点复制内容到 transclusion
+   - 内容比较时忽略首尾空白
+
+4. *智能检测*：Push/pull 命令自动检测你是否在 transclusion 条目内，并相应地执行操作。
+
+* 工作流推荐
+
+** 场景 1：使用 Transclusion
+
+1. 插入 transclusion：=M-x org-roam-more-insert-transclude=
+2. 就地编辑内容
+3. 推送更改：=M-x org-roam-more-transclusion-push=
+4. 如果原节点有更改：=M-x org-roam-more-transclusion-pull=
+
+** 场景 2：创建关联笔记
+
+1. 正常创建父笔记
+2. 使用 =M-x org-roam-more-capture-under-node= 创建子笔记
+3. 可选：将子笔记 transclude 到父笔记中以获得概览
+
+** 场景 3：每日日记
+
+1. 启用 hook：=(org-roam-more-toggle-insert-link-hook t)=
+2. 正常创建笔记
+3. 链接自动出现在你的日记中
+
+* 故障排除
+
+** Transclusion 未被检测到
+
+- 确保标题有 =:transclusion:= 标签
+- 检查 =ORIGINAL-ID= 属性是否存在
+
+** 内容未同步
+
+- 使用 =org-roam-more-transclusion-content-equal-p= 检查是否相等
+- 尝试 =org-roam-more-compare-transclusion-and-roam-content= 查看差异
+
+** 日记插入不工作
+
+- 验证 hook 已启用：=org-roam-more-insert-link-hook-enabled= 应为 =t=
+- 检查 =~/org/roam/daily/journal.org= 是否存在（或自定义路径）
+
+* 贡献
+
+欢迎贡献！请：
+
+1. Fork 仓库
+2. 创建功能分支
+3. 进行更改
+4. 提交 pull request
+
+* 许可证
+
+GPL-3.0-or-later
+
+* 致谢
+
+- [[https://www.orgroam.com/][org-roam]] - 本包构建的基础
+- Emacs 和 Org-mode 社区
+
