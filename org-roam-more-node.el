@@ -41,13 +41,55 @@
 
 ;;; 节点内容操作
 
+(defun org-roam-more--goto-id-property (id)
+  "精确定位到包含 :ID: property 的节点标题。
+与 `org-id-goto' 不同，此函数专门搜索 property drawer 中的 :ID: 属性，
+而不是文件中第一次出现 ID 的位置。这样可以避免定位到 transclusion 中的 ORIGINAL-ID。
+
+参数：
+  ID - 节点的唯一标识符
+
+返回值：
+  如果找到，返回 t 并将光标移动到对应的标题行；
+  如果未找到，报错。"
+  (goto-char (point-min))
+  (let ((search-pattern (format "^[ \t]*:ID:[ \t]+%s[ \t]*$" (regexp-quote id)))
+        (found nil))
+    (while (and (not found) (re-search-forward search-pattern nil t))
+      ;; 确保找到的是在 property drawer 中
+      (save-excursion
+        (let ((prop-start (line-beginning-position)))
+          ;; 向上查找 :PROPERTIES:
+          (when (re-search-backward "^[ \t]*:PROPERTIES:[ \t]*$" nil t)
+            (let ((drawer-start (point)))
+              ;; 向下查找 :END:
+              (when (re-search-forward "^[ \t]*:END:[ \t]*$" nil t)
+                (let ((drawer-end (point)))
+                  ;; 确认 :ID: 在这个 drawer 中
+                  (when (and (>= prop-start drawer-start)
+                           (<= prop-start drawer-end))
+                    ;; 找到了正确的 property drawer，定位到标题
+                    (goto-char drawer-start)
+                    (org-back-to-heading t)
+                    (setq found t)))))))))
+    (unless found
+      (error "无法找到包含 :ID: %s 的节点" id))
+    t))
+
 (defun org-roam-more-skip-property-drawer ()
   "跳过当前位置的 property drawer（如果存在）。
 假设光标已经在标题行后的第一行。
-如果有 property drawer，移动到 :END: 后的下一行；否则保持不动。"
-  (when (looking-at-p org-property-drawer-re)
-    (re-search-forward ":END:" nil t)
-    (forward-line 1)))
+如果有 property drawer，移动到 :END: 后的下一行的开头；否则保持不动。"
+  (when (looking-at "^[ \t]*:PROPERTIES:")
+    ;; 逐行向下查找，直到找到 :END:
+    (let ((found nil))
+      (while (and (not found) (not (eobp)))
+        (forward-line 1)
+        (when (looking-at "^[ \t]*:END:[ \t]*$")
+          (setq found t)))
+      ;; 现在光标在 :END: 行，再向下移动一行
+      (when found
+        (forward-line 1)))))
 
 (defun org-roam-more-get-node-content (node &optional remove-properties remove-heading)
   "获取 org-roam NODE 的内容。
@@ -58,16 +100,20 @@
          (node-id (org-roam-node-id node)))
     (with-current-buffer (find-file-noselect file)
       (save-excursion
-        ;; 使用 org-id-goto 精确定位到节点，避免位置偏差
-        (org-id-goto node-id)
-        (forward-line) ;; 跳过标题行
-        (org-back-to-heading t)
+        ;; 使用专门的函数定位到 :ID: property，避免定位到 transclusion 的 ORIGINAL-ID
+        (org-roam-more--goto-id-property node-id)
         
         (cond
          ;; 同时移除标题和属性：跳过标题行，跳过 property drawer，取剩余内容
          ((and remove-properties remove-heading)
           (forward-line 1)  ; 跳过标题行
-          (org-roam-more-skip-property-drawer)
+          ;; 如果下一行是 :PROPERTIES:，跳过整个 property drawer
+          (when (looking-at "^[ \t]*:PROPERTIES:")
+            (while (and (not (looking-at "^[ \t]*:END:[ \t]*$")) (not (eobp)))
+              (forward-line 1))
+            ;; 现在在 :END: 行，移动到下一行
+            (when (looking-at "^[ \t]*:END:[ \t]*$")
+              (forward-line 1)))
           (let ((content-start (point))
                 (content-end (save-excursion
                                (org-end-of-subtree t t)
@@ -113,9 +159,8 @@ Does not automatically save the file."
         (node-id (org-roam-node-id node)))
     (with-current-buffer (find-file-noselect file)
       (save-excursion
-        ;; 使用 org-id-goto 精确定位到节点
-        (org-id-goto node-id)
-        (org-back-to-heading t)
+        ;; 使用专门的函数定位到 :ID: property，避免定位到 transclusion 的 ORIGINAL-ID
+        (org-roam-more--goto-id-property node-id)
         (forward-line) ;; 跳过标题行
         ;; 跳过 property drawer（如果存在）
         (org-roam-more-skip-property-drawer)

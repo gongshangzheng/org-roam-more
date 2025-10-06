@@ -201,7 +201,7 @@ PATH 是标题字符串列表，如 (\"一级标题\" \"二级标题\" \"目标�
       (insert (format ":ORIGINAL-ID: %s\n" node-id))
       (insert (format ":ORIGINAL-HEADING: %s\n" node-title))
       (insert (format ":ORIGINAL-NODE-LINK: [[id:%s][%s]]\n" node-id node-title))
-      (insert ":END:\n")
+      ;; (insert ":END:\n")
       
       ;; 3. 插入正文内容
       (when (and content (not (string-empty-p (string-trim content))))
