@@ -16,6 +16,7 @@
 ;; - 内容一致性检查
 ;; - 双向同步（push/pull）
 ;; - 可视化对比（ediff）
+;; - 快速跳转到原始节点
 ;;
 ;; 函数列表：
 ;; * 辅助函数
@@ -48,6 +49,7 @@
 ;;
 ;; * 高级功能
 ;;   - `org-roam-more-compare-transclusion-and-roam-content' - 使用 ediff 对比
+;;   - `org-roam-more-transclusion-goto-original' - 跳转到原始节点
 ;;
 ;;; Code:
 
@@ -532,5 +534,38 @@ Returns list of entry contents."
                   (ediff-buffers buf-a buf-b))
               (message "未找到内容")))))))
 
-(provide 'org-roam-more-transclusion)
+(defun org-roam-more-transclusion-goto-original ()
+  "从当前 transclusion 跳转到其原始 org-roam 节点。
+即使光标在 transclusion 的子标题内，也会正确找到原始节点并跳转。
+使用 ORIGINAL-ID 属性来定位并跳转到原始节点。"
+  (interactive)
+  (unless (derived-mode-p 'org-mode)
+    (user-error "当前不在 Org 文件中"))
+  
+  (when (org-before-first-heading-p)
+    (user-error "当前不在任何 Org 项目下"))
+  
+  ;; 找到顶层 transclusion
+  (let ((trans-pos (org-roam-more-find-transclusion-heading)))
+    (unless trans-pos
+      (user-error "当前位置不在 transclusion 内"))
+    
+    (let (original-id node)
+      (save-excursion
+        (goto-char trans-pos)
+        ;; 获取原节点 ID
+        (setq original-id (org-entry-get nil "ORIGINAL-ID"))
+        (unless original-id
+          (user-error "未找到 ORIGINAL-ID 属性"))
+        
+        ;; 获取原节点
+        (setq node (org-roam-node-from-id original-id))
+        (unless node
+          (user-error "无法找到原始 node (ID: %s)" original-id)))
+      
+      ;; 使用 org-roam 的内置函数跳转（会切换窗口和移动光标）
+      (org-roam-node-visit node)
+      (message "已跳转到原始节点：%s" (org-roam-node-title node)))))
+
+(provide 'org-roam-more-transclusion)  
 ;;; org-roam-more-transclusion.el ends here
