@@ -18,10 +18,18 @@
 ;; - 可视化对比（ediff）
 ;;
 ;; 函数列表：
+;; * 辅助函数
+;;   - `org-roam-more-find-transclusion-heading' - 向上查找 transclusion 顶层标题
+;;   - `org-roam-more-get-transclusion-path' - 获取 transclusion 的大纲路径
+;;
 ;; * 核心功能
 ;;   - `org-roam-more-insert-transclude' - 插入 transclusion
-;;   - `org-roam-more-is-transclusion-p' - 判断是否为 transclusion
-;;   - `org-roam-more-transclusion-content-equal-p' - 检查内容是否一致
+;;   - `org-roam-more-is-transclusion-p' - 判断是否为 transclusion（支持子标题）
+;;   - `org-roam-more-transclusion-content-equal-p' - 检查内容是否一致（支持子标题）
+;;
+;; * 内容提取
+;;   - `org-roam-more-get-body-content-at-path' - 根据路径提取正文内容
+;;   - `org-roam-more-get-current-transclusion-body' - 获取当前 transclusion 正文
 ;;
 ;; * 查询功能
 ;;   - `org-roam-more-get-transclusion-entries' - 获取所有 transclusion 条目
@@ -58,6 +66,87 @@
   :group 'org-roam-more)
 
 ;;; 辅助函数
+
+(defun org-roam-more-find-transclusion-heading ()
+  "向上查找带有 :transclusion: 标签的祖先标题。
+如果当前在 transclusion 的子标题内，返回顶层 transclusion 标题的位置。
+如果当前就在 transclusion 标题上，返回当前位置。
+如果没有找到，返回 nil。"
+  (save-excursion
+    (catch 'found
+      ;; 先回到当前标题
+      (org-back-to-heading t)
+      ;; 检查当前标题
+      (when (member "transclusion" (org-get-tags nil t))
+        (throw 'found (point)))
+      ;; 向上查找
+      (while (org-up-heading-safe)
+        (when (member "transclusion" (org-get-tags nil t))
+          (throw 'found (point))))
+      ;; 没找到
+      nil)))
+
+(defun org-roam-more-get-transclusion-path ()
+  "获取当前光标所在 transclusion 的大纲路径。
+即使光标在 transclusion 的子标题内，也会返回顶层 transclusion 的路径。
+返回路径列表，如 (\"一级\" \"二级\" \"transclusion标题\")。
+如果不在 transclusion 内，返回 nil。"
+  (let ((trans-pos (org-roam-more-find-transclusion-heading)))
+    (when trans-pos
+      (save-excursion
+        (goto-char trans-pos)
+        (org-roam-more-get-current-path)))))
+
+(defun org-roam-more-get-body-content-at-path (path)
+  "根据路径 PATH 提取条目的正文内容。
+自动去除标题行和 :PROPERTIES: 区块，只返回正文字符串。
+PATH 是标题字符串列表，如 (\"一级标题\" \"二级标题\" \"目标标题\")。
+使用 org-mode 官方函数来获取子树内容。
+返回去除标题和属性后的正文内容字符串，找不到则返回 nil。"
+  (let ((pos (org-roam-more-get-headline-pos-by-path path)))
+    (when pos
+      (save-excursion
+        (goto-char pos)
+        (org-back-to-heading t)
+        ;; 跳过标题行
+        (forward-line 1)
+        ;; 跳过 property drawer
+        (when (looking-at-p org-property-drawer-re)
+          (re-search-forward ":END:" nil t)
+          (forward-line 1))
+        (let ((content-start (point))
+              (content-end (save-excursion
+                             (org-end-of-subtree t t)
+                             (point))))
+          ;; 去除首尾空行
+          (string-trim (buffer-substring-no-properties content-start content-end)))))))
+
+(defun org-roam-more-get-current-transclusion-body ()
+  "获取当前光标所在 transclusion 条目的正文内容。
+即使光标在 transclusion 的子标题内，也会找到顶层 transclusion 并获取其完整内容。
+使用 org-mode 官方函数来正确处理子树和 property drawer。
+返回去除标题和属性后的正文内容字符串。"
+  (unless (derived-mode-p 'org-mode)
+    (user-error "当前不在 Org 文件中"))
+  
+  (let ((trans-pos (org-roam-more-find-transclusion-heading)))
+    (unless trans-pos
+      (user-error "当前位置不在 transclusion 内"))
+    
+    (save-excursion
+      (goto-char trans-pos)
+      ;; 跳过标题行
+      (forward-line 1)
+      ;; 跳过 property drawer
+      (when (looking-at-p org-property-drawer-re)
+        (re-search-forward ":END:" nil t)
+        (forward-line 1))
+      (let ((content-start (point))
+            (content-end (save-excursion
+                           (org-end-of-subtree t t)
+                           (point))))
+        ;; 去除首尾空行
+        (string-trim (buffer-substring-no-properties content-start content-end))))))
 
 (defun org-roam-more-get-outline-path-from-element (element)
   "从 headline ELEMENT（org-element）递归获取标题路径（字符串列表）。"
@@ -139,71 +228,65 @@
         (message "已插入 transclusion: %s" node-title)))))
 
 (defun org-roam-more-is-transclusion-p ()
-  "判断当前 item 是否是 transclusion。
-检查当前条目是否有 :transclusion: 标签。"
+  "判断当前位置是否在 transclusion 内。
+检查当前条目或其祖先条目是否有 :transclusion: 标签。
+即使光标在 transclusion 的子标题内，也会返回 t。"
   (interactive)
   (if (not (derived-mode-p 'org-mode))
       (progn
         (message "当前不在 Org 文件中")
         nil)
-    (let ((tags (org-get-tags)))
-      (if (member "transclusion" tags)
+    (let ((trans-pos (org-roam-more-find-transclusion-heading)))
+      (if trans-pos
           (progn
             (when (called-interactively-p 'any)
-              (message "当前条目是 transclusion"))
+              (message "当前位置在 transclusion 内"))
             t)
         (progn
           (when (called-interactively-p 'any)
-            (message "当前条目不是 transclusion"))
+            (message "当前位置不在 transclusion 内"))
           nil)))))
 
 (defun org-roam-more-transclusion-content-equal-p ()
   "判断当前 transclusion 的内容是否与原 node 的内容一致。
-忽略首尾空行差异。如果当前条目不是 transclusion，返回 nil。"
+即使光标在 transclusion 的子标题内，也会正确比较顶层 transclusion 的内容。
+忽略首尾空行差异。如果当前位置不在 transclusion 内，返回 nil。"
   (interactive)
   (unless (derived-mode-p 'org-mode)
     (user-error "当前不在 Org 文件中"))
   
-  (if (not (org-roam-more-is-transclusion-p))
-      (progn
-        (when (called-interactively-p 'any)
-          (message "当前条目不是 transclusion"))
-        nil)
-    
-    (let* ((original-id (org-entry-get nil "ORIGINAL-ID"))
-           (node (when original-id (org-roam-node-from-id original-id))))
-      (if (not node)
-          (progn
-            (when (called-interactively-p 'any)
-              (message "无法找到原始 node"))
-            nil)
-        
-        ;; 获取当前 transclusion 的内容（不包括标题和 property）
-        (let* ((current-content 
-                (save-excursion
-                  (let* ((element (org-element-at-point))
-                         (begin (org-element-property :begin element))
-                         (end (org-element-property :end element))
-                         (content (buffer-substring-no-properties begin end)))
-                    ;; 移除标题行和 property
-                    (setq content (replace-regexp-in-string
-                                   "^\\*+\\s-+.*\n" "" content))
-                    (setq content (replace-regexp-in-string
-                                   ":PROPERTIES:\\(?:.*\n\\)*?:END:\n?" "" content))
-                    ;; 去除首尾空行
-                    (string-trim content))))
-               ;; 获取原始 node 的内容（不包括标题和 property）
-               (original-content
-                (let ((raw (org-roam-more-get-node-content node t t)))
-                  ;; 去除首尾空行
-                  (string-trim raw)))
-               (equal-p (string= current-content original-content)))
-          
+  ;; 找到顶层 transclusion
+  (let ((trans-pos (org-roam-more-find-transclusion-heading)))
+    (if (not trans-pos)
+        (progn
           (when (called-interactively-p 'any)
-            (if equal-p
-                (message "内容一致")
-              (message "内容不一致")))
-          equal-p)))))
+            (message "当前位置不在 transclusion 内"))
+          nil)
+      
+      (save-excursion
+        (goto-char trans-pos)
+        (let* ((original-id (org-entry-get nil "ORIGINAL-ID"))
+               (node (when original-id (org-roam-node-from-id original-id))))
+          (if (not node)
+              (progn
+                (when (called-interactively-p 'any)
+                  (message "无法找到原始 node"))
+                nil)
+            
+            ;; 获取当前 transclusion 的内容（不包括标题和 property）
+            (let* ((current-content (org-roam-more-get-current-transclusion-body))
+                   ;; 获取原始 node 的内容（不包括标题和 property）
+                   (original-content
+                    (let ((raw (org-roam-more-get-node-content node t t)))
+                      ;; 去除首尾空行
+                      (string-trim raw)))
+                   (equal-p (string= current-content original-content)))
+              
+              (when (called-interactively-p 'any)
+                (if equal-p
+                    (message "内容一致")
+                  (message "内容不一致")))
+              equal-p)))))))
 
 ;;; 查询功能
 
@@ -246,15 +329,10 @@ Returns list of entry contents."
 
 (defun org-roam-more-transclusion-push-all ()
   "将当前文件所有 transclusion 条目的内容推送到其对应的 org-roam 节点。
-对每个 :transclusion: 标签的条目：
-1. 检查是否有 transclusion 标签
-2. 检查内容是否与原 node 一致
-3. 如果一致则跳过，不一致则更新
-4. 更新时保留原 node 的标题和 property"
+直接覆盖原 node 的内容，保留原 node 的标题和 property。"
   (interactive)
   (let ((transclusion-paths (org-roam-more-get-transclusion-paths))
-        (updated-count 0)
-        (skipped-count 0))
+        (updated-count 0))
     (dolist (path transclusion-paths)
       (save-excursion
         (let ((pos (org-roam-more-get-headline-pos-by-path path)))
@@ -264,38 +342,17 @@ Returns list of entry contents."
                    (node (when original-id (org-roam-node-from-id original-id))))
               (if (not node)
                   (message "跳过：无法找到原始 node (路径: %s)" path)
-                ;; 获取当前 transclusion 的内容（不含标题和 property）
-                (let* ((current-content 
-                        (let* ((element (org-element-at-point))
-                               (begin (org-element-property :begin element))
-                               (end (org-element-property :end element))
-                               (content (buffer-substring-no-properties begin end)))
-                          ;; 移除标题和 property
-                          (setq content (replace-regexp-in-string
-                                         "^\\*+\\s-+.*\n" "" content))
-                          (setq content (replace-regexp-in-string
-                                         ":PROPERTIES:\\(?:.*\n\\)*?:END:\n?" "" content))
-                          (string-trim content)))
-                       ;; 获取原 node 内容
-                       (original-content 
-                        (string-trim (org-roam-more-get-node-content node t t))))
-                  
-                  (if (string= current-content original-content)
-                      (progn
-                        (message "内容一致，跳过：%s" (car (last path)))
-                        (setq skipped-count (1+ skipped-count)))
-                    ;; 内容不一致，更新原 node
-                    (org-roam-more-set-node-content node current-content)
-                    (message "已同步到 Org-roam 节点：%s" (car (last path)))
-                    (setq updated-count (1+ updated-count))))))))))
-    (message "推送完成：更新 %d 个，跳过 %d 个" updated-count skipped-count)))
+                ;; 使用辅助函数获取当前 transclusion 的正文内容并直接推送
+                (let ((current-content (org-roam-more-get-body-content-at-path path)))
+                  (org-roam-more-set-node-content node current-content)
+                  (message "已推送到 Org-roam 节点：%s" (car (last path)))
+                  (setq updated-count (1+ updated-count)))))))))
+    (message "推送完成：更新 %d 个节点" updated-count)))
 
 (defun org-roam-more-transclusion-push-current ()
   "将当前 transclusion 条目的内容推送到其对应的 org-roam 节点。
-1. 检查当前条目是否有 :transclusion: 标签
-2. 检查内容是否与原 node 一致
-3. 如果一致则提示跳过，不一致则更新
-4. 更新时保留原 node 的标题和 property"
+即使光标在 transclusion 的子标题内，也会正确找到顶层 transclusion 并推送。
+直接覆盖原 node 的内容，保留原 node 的标题和 property。"
   (interactive)
   (unless (derived-mode-p 'org-mode)
     (user-error "当前不在 Org 文件中"))
@@ -303,52 +360,34 @@ Returns list of entry contents."
   (when (org-before-first-heading-p)
     (user-error "当前不在任何 Org 项目下"))
 
-  ;; 检查是否有 :transclusion: 标签
-  (unless (org-roam-more-is-transclusion-p)
-    (user-error "当前条目没有 :transclusion: 标签"))
-
-  ;; 获取原 node
-  (let* ((original-id (org-entry-get nil "ORIGINAL-ID"))
-         (node (when original-id (org-roam-node-from-id original-id))))
+  ;; 找到顶层 transclusion
+  (let ((trans-pos (org-roam-more-find-transclusion-heading)))
+    (unless trans-pos
+      (user-error "当前位置不在 transclusion 内"))
     
-    (unless node
-      (user-error "无法找到原始 node (ID: %s)" original-id))
-    
-    ;; 获取当前内容
-    (let* ((current-content 
-            (let* ((element (org-element-at-point))
-                   (begin (org-element-property :begin element))
-                   (end (org-element-property :end element))
-                   (content (buffer-substring-no-properties begin end)))
-              ;; 移除标题和 property
-              (setq content (replace-regexp-in-string
-                             "^\\*+\\s-+.*\n" "" content))
-              (setq content (replace-regexp-in-string
-                             ":PROPERTIES:\\(?:.*\n\\)*?:END:\n?" "" content))
-              (string-trim content)))
-           ;; 获取原 node 内容
-           (original-content 
-            (string-trim (org-roam-more-get-node-content node t t))))
-      
-      (if (string= current-content original-content)
-          (message "内容一致，无需更新")
-        ;; 内容不一致，更新原 node
-        (org-roam-more-set-node-content node current-content)
-        (message "已推送到 Org-roam 节点：%s" (org-roam-node-title node))))))
+    (save-excursion
+      (goto-char trans-pos)
+      ;; 获取原 node 和路径
+      (let* ((path (org-roam-more-get-current-path))
+             (original-id (org-entry-get nil "ORIGINAL-ID"))
+             (node (when original-id (org-roam-node-from-id original-id))))
+        
+        (unless node
+          (user-error "无法找到原始 node (ID: %s)" original-id))
+        
+        ;; 使用辅助函数获取当前 transclusion 的正文内容并直接推送
+        (let ((current-content (org-roam-more-get-current-transclusion-body)))
+          (org-roam-more-set-node-content node current-content)
+          (message "已推送到 Org-roam 节点：%s" (org-roam-node-title node)))))))
 
 ;;; 同步功能 - Pull（原节点 → transclusion）
 
 (defun org-roam-more-transclusion-pull-all ()
   "将当前文件所有 transclusion 条目从对应的 org-roam 节点拉取内容。
-对每个 :transclusion: 标签的条目：
-1. 检查是否有 transclusion 标签
-2. 检查内容是否与原 node 一致
-3. 如果一致则跳过，不一致则更新
-4. 更新时保留 transclusion 的标题和 property"
+直接覆盖 transclusion 的内容，保留 transclusion 的标题和 property。"
   (interactive)
   (let ((transclusion-paths (org-roam-more-get-transclusion-paths))
-        (updated-count 0)
-        (skipped-count 0))
+        (updated-count 0))
     (dolist (path transclusion-paths)
       (save-excursion
         (let ((pos (org-roam-more-get-headline-pos-by-path path)))
@@ -358,38 +397,18 @@ Returns list of entry contents."
                    (node (when original-id (org-roam-node-from-id original-id))))
               (if (not node)
                   (message "跳过：无法找到原始 node (路径: %s)" path)
-                ;; 获取当前 transclusion 的内容
-                (let* ((current-content 
-                        (let* ((element (org-element-at-point))
-                               (begin (org-element-property :begin element))
-                               (end (org-element-property :end element))
-                               (content (buffer-substring-no-properties begin end)))
-                          ;; 移除标题和 property
-                          (setq content (replace-regexp-in-string
-                                         "^\\*+\\s-+.*\n" "" content))
-                          (setq content (replace-regexp-in-string
-                                         ":PROPERTIES:\\(?:.*\n\\)*?:END:\n?" "" content))
-                          (string-trim content)))
-                       ;; 获取原 node 内容
-                       (original-content 
-                        (string-trim (org-roam-more-get-node-content node t t))))
-                  
-                  (if (string= current-content original-content)
-                      (progn
-                        (message "内容一致，跳过：%s" (car (last path)))
-                        (setq skipped-count (1+ skipped-count)))
-                    ;; 内容不一致，用原 node 内容更新当前 transclusion
-                    (org-roam-more-set-content-at-path path original-content)
-                    (message "已从 Org-roam 节点拉取到：%s" (car (last path)))
-                    (setq updated-count (1+ updated-count))))))))))
-    (message "拉取完成：更新 %d 个，跳过 %d 个" updated-count skipped-count)))
+                ;; 获取原 node 的正文内容并直接拉取
+                (let ((original-content 
+                       (string-trim (org-roam-more-get-node-content node t t))))
+                  (org-roam-more-set-content-at-path path original-content)
+                  (message "已从 Org-roam 节点拉取到：%s" (car (last path)))
+                  (setq updated-count (1+ updated-count)))))))))
+    (message "拉取完成：更新 %d 个节点" updated-count)))
 
 (defun org-roam-more-transclusion-pull-current ()
   "将当前 transclusion 条目从对应的 org-roam 节点拉取内容。
-1. 检查当前条目是否有 :transclusion: 标签
-2. 检查内容是否与原 node 一致
-3. 如果一致则提示跳过，不一致则更新
-4. 更新时保留 transclusion 的标题和 property"
+即使光标在 transclusion 的子标题内，也会正确找到顶层 transclusion 并拉取。
+直接覆盖 transclusion 的内容，保留 transclusion 的标题和 property。"
   (interactive)
   (unless (derived-mode-p 'org-mode)
     (user-error "当前不在 Org 文件中"))
@@ -397,39 +416,26 @@ Returns list of entry contents."
   (when (org-before-first-heading-p)
     (user-error "当前不在任何 Org 项目下"))
 
-  ;; 检查是否有 :transclusion: 标签
-  (unless (org-roam-more-is-transclusion-p)
-    (user-error "当前条目没有 :transclusion: 标签"))
-
-  ;; 获取原 node
-  (let* ((original-id (org-entry-get nil "ORIGINAL-ID"))
-         (node (when original-id (org-roam-node-from-id original-id))))
+  ;; 找到顶层 transclusion
+  (let ((trans-pos (org-roam-more-find-transclusion-heading)))
+    (unless trans-pos
+      (user-error "当前位置不在 transclusion 内"))
     
-    (unless node
-      (user-error "无法找到原始 node (ID: %s)" original-id))
-    
-    ;; 获取当前内容
-    (let* ((current-content 
-            (let* ((element (org-element-at-point))
-                   (begin (org-element-property :begin element))
-                   (end (org-element-property :end element))
-                   (content (buffer-substring-no-properties begin end)))
-              ;; 移除标题和 property
-              (setq content (replace-regexp-in-string
-                             "^\\*+\\s-+.*\n" "" content))
-              (setq content (replace-regexp-in-string
-                             ":PROPERTIES:\\(?:.*\n\\)*?:END:\n?" "" content))
-              (string-trim content)))
-           ;; 获取原 node 内容
-           (original-content 
-            (string-trim (org-roam-more-get-node-content node t t)))
-           (path (org-roam-more-get-current-path)))
-      
-      (if (string= current-content original-content)
-          (message "内容一致，无需更新")
-        ;; 内容不一致，用原 node 内容更新当前 transclusion
-        (org-roam-more-set-content-at-path path original-content)
-        (message "已从 Org-roam 节点拉取到当前 transclusion")))))
+    (save-excursion
+      (goto-char trans-pos)
+      ;; 获取原 node 和路径
+      (let* ((path (org-roam-more-get-current-path))
+             (original-id (org-entry-get nil "ORIGINAL-ID"))
+             (node (when original-id (org-roam-node-from-id original-id))))
+        
+        (unless node
+          (user-error "无法找到原始 node (ID: %s)" original-id))
+        
+        ;; 获取原 node 的正文内容并直接拉取
+        (let ((original-content 
+               (string-trim (org-roam-more-get-node-content node t t))))
+          (org-roam-more-set-content-at-path path original-content)
+          (message "已从 Org-roam 节点拉取到当前 transclusion"))))))
 
 ;;; 智能同步
 
@@ -466,39 +472,65 @@ Returns list of entry contents."
 ;;; 高级功能
 
 (defun org-roam-more-compare-transclusion-and-roam-content ()
-  "Compare transclusion content with org-roam node content using ediff.
-For all :transclusion: tagged entries, shows differences between file content
-and corresponding org-roam node content. Updates both after ediff completes."
+  "使用 ediff 比较当前 transclusion 与原 org-roam 节点的内容。
+只比较光标当前所在的 transclusion 条目，编辑完成后更新两边的内容。
+即使光标在 transclusion 的子标题内，也会正确找到顶层 transclusion 并比较。
+必须在 transclusion 条目内调用此命令。"
   (interactive)
-  (let ((transclusion-paths (org-roam-more-get-transclusion-paths)))
-    (dolist (path transclusion-paths)
-      (let* ((title-or-alias (car (last path)))
-             (node (org-roam-node-from-title-or-alias title-or-alias))
-             (roam-content (org-roam-more-get-node-content node t))
-             (current-content-list (org-roam-more-get-content-at-path path t t))) ;; 移除 properties 和 heading
-        (if (and roam-content current-content-list)
-            (let* ((current-content (car current-content-list))
-                   (buf-a (generate-new-buffer (format "*Org: %s*" title-or-alias)))
-                   (buf-b (generate-new-buffer (format "*Roam: %s*" title-or-alias)))
-                   ;; 记录信息用于恢复
-                   (org-path path)
-                   (roam-node node))
-              (with-current-buffer buf-a (insert current-content))
-              (with-current-buffer buf-b (insert roam-content))
-              ;; 设置 hook 在 ediff 退出后更新内容
-              (let ((hook-fn
-                     `(lambda ()
-                        (let ((new-a (with-current-buffer ,buf-a (buffer-string)))
-                              (new-b (with-current-buffer ,buf-b (buffer-string))))
-                          (org-roam-more-set-content-at-path ',org-path new-a)
-                          (org-roam-more-set-node-content ,roam-node new-b)
-                          (kill-buffer ediff-control-buffer)
-                          (kill-buffer ,buf-a)
-                          (kill-buffer ,buf-b)))))
-                (add-hook 'ediff-after-quit-hook-internal hook-fn))
-              (ediff-buffers buf-a buf-b))
-          (message "未找到路径或内容为空：%s" path))))))
+  (unless (derived-mode-p 'org-mode)
+    (user-error "当前不在 Org 文件中"))
+  
+  (when (org-before-first-heading-p)
+    (user-error "当前不在任何 Org 项目下"))
+  
+  ;; 找到顶层 transclusion
+  (let ((trans-pos (org-roam-more-find-transclusion-heading)))
+    (unless trans-pos
+      (user-error "当前位置不在 transclusion 内"))
+    
+    (save-excursion
+      (goto-char trans-pos)
+      ;; 获取原 node
+      (let* ((path (org-roam-more-get-current-path))
+             (title-or-alias (car (last path)))
+             (original-id (org-entry-get nil "ORIGINAL-ID"))
+             (node (when original-id (org-roam-node-from-id original-id))))
+        
+        (unless node
+          (user-error "无法找到原始 node (ID: %s)" original-id))
+        
+          ;; 使用新的辅助函数获取当前 transclusion 的正文内容
+          (let* ((current-content (org-roam-more-get-current-transclusion-body))
+                 ;; 获取原 node 的正文内容
+                 (roam-content (string-trim (org-roam-more-get-node-content node t t))))
+            
+            (if (and roam-content current-content)
+                (let* ((buf-a (generate-new-buffer (format "*Transclusion: %s*" title-or-alias)))
+                       (buf-b (generate-new-buffer (format "*Original: %s*" title-or-alias)))
+                       ;; 记录信息用于恢复
+                       (org-path path)
+                       (roam-node node))
+                  (with-current-buffer buf-a 
+                    (insert current-content)
+                    (org-mode))  ;; 启用 org-mode 以获得更好的编辑体验
+                  (with-current-buffer buf-b 
+                    (insert roam-content)
+                    (org-mode))
+                  ;; 设置 hook 在 ediff 退出后更新内容
+                  (let ((hook-fn
+                         `(lambda ()
+                            (let ((new-a (with-current-buffer ,buf-a (buffer-string)))
+                                  (new-b (with-current-buffer ,buf-b (buffer-string))))
+                              ;; 更新 transclusion 内容
+                              (org-roam-more-set-content-at-path ',org-path new-a)
+                              ;; 更新原 node 内容
+                              (org-roam-more-set-node-content ,roam-node new-b)
+                              (message "已更新 transclusion 和原节点的内容")
+                              (kill-buffer ,buf-a)
+                              (kill-buffer ,buf-b)))))
+                    (add-hook 'ediff-quit-hook hook-fn nil t))
+                  (ediff-buffers buf-a buf-b))
+              (message "未找到内容")))))))
 
 (provide 'org-roam-more-transclusion)
 ;;; org-roam-more-transclusion.el ends here
-

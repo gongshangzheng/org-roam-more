@@ -14,8 +14,11 @@
 ;; - 设置节点属性
 ;;
 ;; 函数列表：
+;; * 辅助函数
+;;   - `org-roam-more-skip-property-drawer' - 跳过 property drawer
+;;
 ;; * 节点内容操作
-;;   - `org-roam-more-get-node-content' - 获取节点完整内容
+;;   - `org-roam-more-get-node-content' - 获取节点完整内容（支持选择性移除标题/属性）
 ;;   - `org-roam-more-set-node-content' - 设置节点内容（保留标题和属性）
 ;;   - `org-roam-more-get-node-body' - 获取节点正文（交互式）
 ;;
@@ -38,27 +41,68 @@
 
 ;;; 节点内容操作
 
+(defun org-roam-more-skip-property-drawer ()
+  "跳过当前位置的 property drawer（如果存在）。
+假设光标已经在标题行后的第一行。
+如果有 property drawer，移动到 :END: 后的下一行；否则保持不动。"
+  (when (looking-at-p org-property-drawer-re)
+    (re-search-forward ":END:" nil t)
+    (forward-line 1)))
+
 (defun org-roam-more-get-node-content (node &optional remove-properties remove-heading)
   "获取 org-roam NODE 的内容。
 如果 REMOVE-PROPERTIES 为非 nil，则去除 :PROPERTIES: 区块。
-如果 REMOVE-HEADING 为非 nil，则去除首行标题（保留子标题）。"
+如果 REMOVE-HEADING 为非 nil，则去除首行标题（保留子标题）。
+使用指针移动方式，避免正则表达式替换的不可靠性。"
   (let* ((file (org-roam-node-file node))
-         (point (org-roam-node-point node))
-         (content ""))
+         (point (org-roam-node-point node)))
     (with-current-buffer (find-file-noselect file)
       (save-excursion
         (goto-char point)
-        (let ((beg (point))
-              (end (progn (org-end-of-subtree t t)
-                          (point))))
-          (setq content (buffer-substring-no-properties beg end))
-          (when (or (null remove-properties) remove-properties)
-            (setq content
-                  (replace-regexp-in-string ":PROPERTIES:\\(?:.*\n\\)*?:END:\n?" "" content)))
-          (when (or (null remove-heading) remove-heading)
-            (setq content
-                  (mapconcat #'identity (cdr (split-string content "\n")) "\n"))))))
-    content))
+        (org-back-to-heading t)
+        
+        (cond
+         ;; 同时移除标题和属性：跳过标题行，跳过 property drawer，取剩余内容
+         ((and remove-properties remove-heading)
+          (forward-line 1)  ; 跳过标题行
+          (org-roam-more-skip-property-drawer)
+          (let ((content-start (point))
+                (content-end (save-excursion
+                               (org-end-of-subtree t t)
+                               (point))))
+            (buffer-substring-no-properties content-start content-end)))
+         
+         ;; 只移除标题：跳过标题行，取剩余内容（包括 property drawer）
+         (remove-heading
+          (forward-line 1)  ; 跳过标题行
+          (let ((content-start (point))
+                (content-end (save-excursion
+                               (org-end-of-subtree t t)
+                               (point))))
+            (buffer-substring-no-properties content-start content-end)))
+         
+         ;; 只移除属性：获取完整内容后，跳过 property drawer
+         (remove-properties
+          (let ((heading-start (point)))
+            (forward-line 1)  ; 移到标题下一行
+            (let ((after-heading (point)))
+              (org-roam-more-skip-property-drawer)
+              (let ((after-properties (point))
+                    (content-end (save-excursion
+                                   (org-end-of-subtree t t)
+                                   (point))))
+                ;; 拼接：标题行 + 跳过 property drawer 后的内容
+                (concat
+                 (buffer-substring-no-properties heading-start after-heading)
+                 (buffer-substring-no-properties after-properties content-end))))))
+         
+         ;; 都不移除：获取完整内容
+         (t
+          (let ((content-start (point))
+                (content-end (save-excursion
+                               (org-end-of-subtree t t)
+                               (point))))
+            (buffer-substring-no-properties content-start content-end))))))))
 
 (defun org-roam-more-set-node-content (node new-content)
   "Replace the content of NODE with NEW-CONTENT while preserving heading and properties.

@@ -199,18 +199,14 @@ If HEADING is not provided, prompt for it."
 (defun org-roam-more-get-headline-pos-by-path (path)
   "在当前 buffer 中，根据 PATH(标题列表)查找对应 headline 的位置。
 PATH 是标题字符串列表，如 (\"一级标题\" \"二级标题\" \"目标标题\")。
-返回 headline 起始位置的 point，找不到返回 nil。"
-  (let ((pos (point-min))
-        found-pos)
-    (save-excursion
-      (goto-char pos)
-      (catch 'found
-        (dolist (title path)
-          (setq found-pos (org-find-exact-headline-in-buffer title))
-          (if found-pos
-              (goto-char found-pos)
-            (throw 'found nil))) ;; 找不到就退出
-        found-pos))))
+使用 org-mode 官方函数 `org-find-olp' 来正确处理层级关系。
+返回 headline 起始位置的 point，找不到则返回 nil。"
+  (condition-case err
+      (save-excursion
+        (org-find-olp path t))
+    (error
+     (message "无法找到路径：%S，错误：%S" path err)
+     nil)))
 
 (defun org-roam-more-get-original-id-at-path (path id-key)
   "根据 PATH 获取当前 buffer 中对应 headline 的 ORIGINAL-ID。
