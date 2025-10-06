@@ -86,11 +86,19 @@ M-x org-roam-more-transclusion-pull-current
 ** 启用日记集成
 
 #+BEGIN_SRC elisp
-;; 启用自动日记插入
-(org-roam-more-toggle-insert-link-hook t)
+;; 方式 1：在配置文件中设置（推荐，自动生效）
+(setq org-roam-more-daily-journal-file "~/org/roam/daily/journal.org")  ; 可选
+(setq org-roam-more-daily-insert-on-capture t)  ; capture 时自动插入
+;; 或者
+;; (setq org-roam-more-daily-insert-on-create-id t)  ; 创建 ID 时自动插入
 
-;; 禁用
-(org-roam-more-toggle-insert-link-hook nil)
+;; 模块加载后会自动应用这些设置
+
+;; 方式 2：手动调用（如果需要在运行时切换）
+(org-roam-more-daily-setup-hooks)
+
+;; 方式 3：使用旧的 API（已废弃，但仍然兼容）
+;; (org-roam-more-toggle-insert-link-hook t)
 #+END_SRC
 
 * 模块结构

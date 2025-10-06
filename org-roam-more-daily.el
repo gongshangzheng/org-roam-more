@@ -201,7 +201,9 @@
 模板中的 %s 会被替换为节点链接，其他占位符（如 %U, %t）保留给 org-capture 处理。
 在节点链接下方会自动添加该节点的文件链接，方便跳转。"
   (let* ((node (org-roam-node-from-id id))
-         (file-path (when node (org-roam-node-file node)))
+         (file-path (if node 
+                        (org-roam-node-file node)
+                      (buffer-file-name)))
          (id-link (org-roam-more--link-make-string (concat "id:" id) title))
          ;; 构建完整的插入内容：节点 ID 链接 + 文件链接
          (full-content (if file-path
@@ -254,6 +256,15 @@
              (captured-title title))
          (lambda ()
            (org-roam-more-insert-new-node-link-into-daily captured-id captured-title)))))))
+
+;;; 自动初始化
+
+;; 如果用户已经设置了配置变量，自动应用 hooks
+;; 这样在加载模块时就会自动启用功能，无需手动调用 setup-hooks
+(with-eval-after-load 'org-roam
+  (when (or org-roam-more-daily-insert-on-capture
+            org-roam-more-daily-insert-on-create-id)
+    (org-roam-more-daily-setup-hooks)))
 
 (provide 'org-roam-more-daily)
 ;;; org-roam-more-daily.el ends here

@@ -86,11 +86,19 @@ M-x org-roam-more-transclusion-pull-current
 ** Enable Daily Integration
 
 #+BEGIN_SRC elisp
-;; Enable automatic daily journal insertion
-(org-roam-more-toggle-insert-link-hook t)
+;; Method 1: Set in config file (recommended, auto-applied)
+(setq org-roam-more-daily-journal-file "~/org/roam/daily/journal.org")  ; optional
+(setq org-roam-more-daily-insert-on-capture t)  ; auto-insert on capture
+;; Or
+;; (setq org-roam-more-daily-insert-on-create-id t)  ; auto-insert on ID creation
 
-;; Disable it
-(org-roam-more-toggle-insert-link-hook nil)
+;; Settings will be automatically applied when module loads
+
+;; Method 2: Manual call (if you need to toggle at runtime)
+(org-roam-more-daily-setup-hooks)
+
+;; Method 3: Using old API (deprecated but still compatible)
+;; (org-roam-more-toggle-insert-link-hook t)
 #+END_SRC
 
 * Module Structure
