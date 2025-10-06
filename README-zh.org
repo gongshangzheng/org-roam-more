@@ -24,6 +24,8 @@
 - 内容一致性检查
 - 使用 ediff 的可视化对比
 - 基于标签的 transclusion 追踪
+- 快速导航到原始节点
+- 即使光标在子标题内也能智能识别
 
 ** 📦 节点内容管理
 
@@ -109,15 +111,16 @@ M-x org-roam-more-transclusion-pull
 | 函数 | 描述 |
 |------|------|
 | =org-roam-more-insert-transclude= | 在光标处插入 transclusion |
-| =org-roam-more-is-transclusion-p= | 检查当前条目是否为 transclusion |
-| =org-roam-more-transclusion-content-equal-p= | 检查内容是否一致 |
+| =org-roam-more-is-transclusion-p= | 检查当前条目是否为 transclusion（支持子标题） |
+| =org-roam-more-transclusion-content-equal-p= | 检查内容是否一致（支持子标题） |
 | =org-roam-more-transclusion-push= | 智能推送（当前或全部） |
 | =org-roam-more-transclusion-pull= | 智能拉取（当前或全部） |
-| =org-roam-more-transclusion-push-current= | 推送当前 transclusion |
+| =org-roam-more-transclusion-push-current= | 推送当前 transclusion（支持子标题） |
 | =org-roam-more-transclusion-push-all= | 推送文件中所有 transclusion |
-| =org-roam-more-transclusion-pull-current= | 拉取到当前 transclusion |
+| =org-roam-more-transclusion-pull-current= | 拉取到当前 transclusion（支持子标题） |
 | =org-roam-more-transclusion-pull-all= | 拉取到所有 transclusion |
-| =org-roam-more-compare-transclusion-and-roam-content= | 使用 ediff 对比 |
+| =org-roam-more-compare-transclusion-and-roam-content= | 使用 ediff 对比（支持子标题） |
+| =org-roam-more-transclusion-goto-original= | 从 transclusion 跳转到原始节点 |
 
 ** 节点操作
 
@@ -189,6 +192,10 @@ M-x org-roam-more-transclusion-pull
 
 ;; 使用 ediff 对比并更新两侧
 (org-roam-more-compare-transclusion-and-roam-content)
+
+;; 从 transclusion 跳转到原始节点
+;; 即使光标在 transclusion 的子标题内也能正常工作
+(org-roam-more-transclusion-goto-original)
 #+END_SRC
 
 ** 节点内容操作
@@ -257,6 +264,7 @@ M-x org-roam-more-transclusion-pull
   (define-key org-mode-map (kbd "C-c n t p") #'org-roam-more-transclusion-push)
   (define-key org-mode-map (kbd "C-c n t u") #'org-roam-more-transclusion-pull)
   (define-key org-mode-map (kbd "C-c n t c") #'org-roam-more-compare-transclusion-and-roam-content)
+  (define-key org-mode-map (kbd "C-c n t g") #'org-roam-more-transclusion-goto-original)
   (define-key org-mode-map (kbd "C-c n c") #'org-roam-more-capture-under-node))
 #+END_SRC
 
@@ -273,7 +281,9 @@ M-x org-roam-more-transclusion-pull
    - *Pull（拉取）*：从原节点复制内容到 transclusion
    - 内容比较时忽略首尾空白
 
-4. *智能检测*：Push/pull 命令自动检测你是否在 transclusion 条目内，并相应地执行操作。
+4. *智能检测*：Push/pull 命令自动检测你是否在 transclusion 条目内，并相应地执行操作。即使光标在 transclusion 的子标题内，系统也能正确识别顶层 transclusion。
+
+5. *导航*：使用 =org-roam-more-transclusion-goto-original= 可以从任何 transclusion（或其子标题）快速跳转回原始节点。
 
 * 工作流推荐
 

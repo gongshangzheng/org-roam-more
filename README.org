@@ -24,6 +24,8 @@ Insert content from one node into another location while maintaining bidirection
 - Content equality checking
 - Visual diff with ediff integration
 - Tag-based transclusion tracking
+- Quick navigation to original nodes
+- Smart detection works even when cursor is in subheadings
 
 ** 📦 Node Content Management
 
@@ -109,15 +111,16 @@ The package is organized into focused modules:
 | Function | Description |
 |----------|-------------|
 | =org-roam-more-insert-transclude= | Insert transclusion at point |
-| =org-roam-more-is-transclusion-p= | Check if current entry is a transclusion |
-| =org-roam-more-transclusion-content-equal-p= | Check content equality |
+| =org-roam-more-is-transclusion-p= | Check if current entry is a transclusion (works in subheadings) |
+| =org-roam-more-transclusion-content-equal-p= | Check content equality (works in subheadings) |
 | =org-roam-more-transclusion-push= | Smart push (current or all) |
 | =org-roam-more-transclusion-pull= | Smart pull (current or all) |
-| =org-roam-more-transclusion-push-current= | Push current transclusion |
+| =org-roam-more-transclusion-push-current= | Push current transclusion (works in subheadings) |
 | =org-roam-more-transclusion-push-all= | Push all transclusions in file |
-| =org-roam-more-transclusion-pull-current= | Pull to current transclusion |
+| =org-roam-more-transclusion-pull-current= | Pull to current transclusion (works in subheadings) |
 | =org-roam-more-transclusion-pull-all= | Pull to all transclusions in file |
-| =org-roam-more-compare-transclusion-and-roam-content= | Compare with ediff |
+| =org-roam-more-compare-transclusion-and-roam-content= | Compare with ediff (works in subheadings) |
+| =org-roam-more-transclusion-goto-original= | Jump to original node from transclusion |
 
 ** Node Operations
 
@@ -189,6 +192,10 @@ The package is organized into focused modules:
 
 ;; Compare with ediff and update both sides
 (org-roam-more-compare-transclusion-and-roam-content)
+
+;; Jump to original node from transclusion
+;; Works even when cursor is in a subheading of the transclusion
+(org-roam-more-transclusion-goto-original)
 #+END_SRC
 
 ** Node Content Manipulation
@@ -257,6 +264,7 @@ The package is organized into focused modules:
   (define-key org-mode-map (kbd "C-c n t p") #'org-roam-more-transclusion-push)
   (define-key org-mode-map (kbd "C-c n t u") #'org-roam-more-transclusion-pull)
   (define-key org-mode-map (kbd "C-c n t c") #'org-roam-more-compare-transclusion-and-roam-content)
+  (define-key org-mode-map (kbd "C-c n t g") #'org-roam-more-transclusion-goto-original)
   (define-key org-mode-map (kbd "C-c n c") #'org-roam-more-capture-under-node))
 #+END_SRC
 
@@ -273,7 +281,9 @@ The package is organized into focused modules:
    - *Pull*: Copy content from original node → transclusion
    - Content comparison ignores leading/trailing whitespace
 
-4. *Smart Detection*: Push/pull commands automatically detect whether you're inside a transclusion entry or not, and act accordingly.
+4. *Smart Detection*: Push/pull commands automatically detect whether you're inside a transclusion entry or not, and act accordingly. Even if your cursor is in a subheading within the transclusion, the system correctly identifies the top-level transclusion.
+
+5. *Navigation*: Use =org-roam-more-transclusion-goto-original= to quickly jump from any transclusion (or its subheadings) back to the original node.
 
 * Workflow Recommendations
 
