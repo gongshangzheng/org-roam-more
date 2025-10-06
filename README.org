@@ -76,11 +76,11 @@ M-x org-roam-more-insert-transclude
 
 ;; 2. Edit the transcluded content...
 
-;; 3. Push changes back to original node
-M-x org-roam-more-transclusion-push
+;; 3. Push changes back to original node (must be inside transclusion entry)
+M-x org-roam-more-transclusion-push-current
 
-;; OR pull updates from original node
-M-x org-roam-more-transclusion-pull
+;; OR pull updates from original node (must be inside transclusion entry)
+M-x org-roam-more-transclusion-pull-current
 #+END_SRC
 
 ** Enable Daily Integration
@@ -113,12 +113,8 @@ The package is organized into focused modules:
 | =org-roam-more-insert-transclude= | Insert transclusion at point |
 | =org-roam-more-is-transclusion-p= | Check if current entry is a transclusion (works in subheadings) |
 | =org-roam-more-transclusion-content-equal-p= | Check content equality (works in subheadings) |
-| =org-roam-more-transclusion-push= | Smart push (current or all) |
-| =org-roam-more-transclusion-pull= | Smart pull (current or all) |
-| =org-roam-more-transclusion-push-current= | Push current transclusion (works in subheadings) |
-| =org-roam-more-transclusion-push-all= | Push all transclusions in file |
-| =org-roam-more-transclusion-pull-current= | Pull to current transclusion (works in subheadings) |
-| =org-roam-more-transclusion-pull-all= | Pull to all transclusions in file |
+| =org-roam-more-transclusion-push-current= | Push current transclusion to original node (works in subheadings) |
+| =org-roam-more-transclusion-pull-current= | Pull from original node to current transclusion (works in subheadings) |
 | =org-roam-more-compare-transclusion-and-roam-content= | Compare with ediff (works in subheadings) |
 | =org-roam-more-transclusion-goto-original= | Jump to original node from transclusion |
 
@@ -174,21 +170,13 @@ The package is organized into focused modules:
 ;; Check if content matches original
 (org-roam-more-transclusion-content-equal-p) ;; => t or nil
 
-;; Smart push - automatically detects context
-;; - If cursor in transclusion entry: push current entry
-;; - Otherwise: push all transclusions in file
-(org-roam-more-transclusion-push)
+;; Push current transclusion to original node
+;; Must be called inside transclusion entry (works in subheadings)
+(org-roam-more-transclusion-push-current)
 
-;; Smart pull - automatically detects context
-;; - If cursor in transclusion entry: pull to current entry
-;; - Otherwise: pull to all transclusions in file
-(org-roam-more-transclusion-pull)
-
-;; Manual control
-(org-roam-more-transclusion-push-current) ;; Push current entry
-(org-roam-more-transclusion-push-all)     ;; Push all entries
-(org-roam-more-transclusion-pull-current) ;; Pull to current
-(org-roam-more-transclusion-pull-all)     ;; Pull to all
+;; Pull from original node to current transclusion
+;; Must be called inside transclusion entry (works in subheadings)
+(org-roam-more-transclusion-pull-current)
 
 ;; Compare with ediff and update both sides
 (org-roam-more-compare-transclusion-and-roam-content)
@@ -261,8 +249,8 @@ The package is organized into focused modules:
 #+BEGIN_SRC elisp
 (with-eval-after-load 'org-roam-more
   (define-key org-mode-map (kbd "C-c n t i") #'org-roam-more-insert-transclude)
-  (define-key org-mode-map (kbd "C-c n t p") #'org-roam-more-transclusion-push)
-  (define-key org-mode-map (kbd "C-c n t u") #'org-roam-more-transclusion-pull)
+  (define-key org-mode-map (kbd "C-c n t p") #'org-roam-more-transclusion-push-current)
+  (define-key org-mode-map (kbd "C-c n t u") #'org-roam-more-transclusion-pull-current)
   (define-key org-mode-map (kbd "C-c n t c") #'org-roam-more-compare-transclusion-and-roam-content)
   (define-key org-mode-map (kbd "C-c n t g") #'org-roam-more-transclusion-goto-original)
   (define-key org-mode-map (kbd "C-c n c") #'org-roam-more-capture-under-node))
@@ -277,22 +265,21 @@ The package is organized into focused modules:
    - Properties: =ORIGINAL-ID=, =ORIGINAL-HEADING=, =ORIGINAL-NODE-LINK=
 
 3. *Sync*:
-   - *Push*: Copy content from transclusion → original node
-   - *Pull*: Copy content from original node → transclusion
-   - Content comparison ignores leading/trailing whitespace
+   - *Push*: Copy content from current transclusion → original node
+   - *Pull*: Copy content from original node → current transclusion
+   - Sync commands must be called from inside a transclusion entry
+   - Even if your cursor is in a subheading within the transclusion, the system correctly identifies the top-level transclusion
 
-4. *Smart Detection*: Push/pull commands automatically detect whether you're inside a transclusion entry or not, and act accordingly. Even if your cursor is in a subheading within the transclusion, the system correctly identifies the top-level transclusion.
-
-5. *Navigation*: Use =org-roam-more-transclusion-goto-original= to quickly jump from any transclusion (or its subheadings) back to the original node.
+4. *Navigation*: Use =org-roam-more-transclusion-goto-original= to quickly jump from any transclusion (or its subheadings) back to the original node.
 
 * Workflow Recommendations
 
 ** Scenario 1: Working with Transclusions
 
 1. Insert transclusion: =M-x org-roam-more-insert-transclude=
-2. Edit the content in place
-3. Push changes: =M-x org-roam-more-transclusion-push=
-4. Later, if original changes: =M-x org-roam-more-transclusion-pull=
+2. Edit the content in place (inside transclusion entry)
+3. Push changes to original node: =M-x org-roam-more-transclusion-push-current=
+4. Later, if original changes, pull updates: =M-x org-roam-more-transclusion-pull-current=
 
 ** Scenario 2: Creating Related Notes
 

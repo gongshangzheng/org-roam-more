@@ -76,11 +76,11 @@ M-x org-roam-more-insert-transclude
 
 ;; 2. 编辑转写的内容...
 
-;; 3. 将更改推送回原节点
-M-x org-roam-more-transclusion-push
+;; 3. 将更改推送回原节点（必须在 transclusion 条目内）
+M-x org-roam-more-transclusion-push-current
 
-;; 或者从原节点拉取更新
-M-x org-roam-more-transclusion-pull
+;; 或者从原节点拉取更新（必须在 transclusion 条目内）
+M-x org-roam-more-transclusion-pull-current
 #+END_SRC
 
 ** 启用日记集成
@@ -113,12 +113,8 @@ M-x org-roam-more-transclusion-pull
 | =org-roam-more-insert-transclude= | 在光标处插入 transclusion |
 | =org-roam-more-is-transclusion-p= | 检查当前条目是否为 transclusion（支持子标题） |
 | =org-roam-more-transclusion-content-equal-p= | 检查内容是否一致（支持子标题） |
-| =org-roam-more-transclusion-push= | 智能推送（当前或全部） |
-| =org-roam-more-transclusion-pull= | 智能拉取（当前或全部） |
-| =org-roam-more-transclusion-push-current= | 推送当前 transclusion（支持子标题） |
-| =org-roam-more-transclusion-push-all= | 推送文件中所有 transclusion |
-| =org-roam-more-transclusion-pull-current= | 拉取到当前 transclusion（支持子标题） |
-| =org-roam-more-transclusion-pull-all= | 拉取到所有 transclusion |
+| =org-roam-more-transclusion-push-current= | 推送当前 transclusion 到原节点（支持子标题） |
+| =org-roam-more-transclusion-pull-current= | 从原节点拉取到当前 transclusion（支持子标题） |
 | =org-roam-more-compare-transclusion-and-roam-content= | 使用 ediff 对比（支持子标题） |
 | =org-roam-more-transclusion-goto-original= | 从 transclusion 跳转到原始节点 |
 
@@ -174,21 +170,13 @@ M-x org-roam-more-transclusion-pull
 ;; 检查内容是否与原节点匹配
 (org-roam-more-transclusion-content-equal-p) ;; => t 或 nil
 
-;; 智能推送 - 自动检测上下文
-;; - 如果光标在 transclusion 条目内：推送当前条目
-;; - 否则：推送文件中所有 transclusion
-(org-roam-more-transclusion-push)
+;; 推送当前 transclusion 到原节点
+;; 必须在 transclusion 条目内调用（支持子标题）
+(org-roam-more-transclusion-push-current)
 
-;; 智能拉取 - 自动检测上下文
-;; - 如果光标在 transclusion 条目内：拉取到当前条目
-;; - 否则：拉取到所有 transclusion
-(org-roam-more-transclusion-pull)
-
-;; 手动控制
-(org-roam-more-transclusion-push-current) ;; 推送当前条目
-(org-roam-more-transclusion-push-all)     ;; 推送所有条目
-(org-roam-more-transclusion-pull-current) ;; 拉取到当前
-(org-roam-more-transclusion-pull-all)     ;; 拉取到全部
+;; 从原节点拉取到当前 transclusion
+;; 必须在 transclusion 条目内调用（支持子标题）
+(org-roam-more-transclusion-pull-current)
 
 ;; 使用 ediff 对比并更新两侧
 (org-roam-more-compare-transclusion-and-roam-content)
@@ -261,8 +249,8 @@ M-x org-roam-more-transclusion-pull
 #+BEGIN_SRC elisp
 (with-eval-after-load 'org-roam-more
   (define-key org-mode-map (kbd "C-c n t i") #'org-roam-more-insert-transclude)
-  (define-key org-mode-map (kbd "C-c n t p") #'org-roam-more-transclusion-push)
-  (define-key org-mode-map (kbd "C-c n t u") #'org-roam-more-transclusion-pull)
+  (define-key org-mode-map (kbd "C-c n t p") #'org-roam-more-transclusion-push-current)
+  (define-key org-mode-map (kbd "C-c n t u") #'org-roam-more-transclusion-pull-current)
   (define-key org-mode-map (kbd "C-c n t c") #'org-roam-more-compare-transclusion-and-roam-content)
   (define-key org-mode-map (kbd "C-c n t g") #'org-roam-more-transclusion-goto-original)
   (define-key org-mode-map (kbd "C-c n c") #'org-roam-more-capture-under-node))
@@ -277,22 +265,21 @@ M-x org-roam-more-transclusion-pull
    - 属性：=ORIGINAL-ID=、=ORIGINAL-HEADING=、=ORIGINAL-NODE-LINK=
 
 3. *同步*：
-   - *Push（推送）*：从 transclusion 复制内容到原节点
-   - *Pull（拉取）*：从原节点复制内容到 transclusion
-   - 内容比较时忽略首尾空白
+   - *Push（推送）*：从当前 transclusion 复制内容到原节点
+   - *Pull（拉取）*：从原节点复制内容到当前 transclusion
+   - 必须在 transclusion 条目内调用同步命令
+   - 即使光标在 transclusion 的子标题内，系统也能正确识别顶层 transclusion
 
-4. *智能检测*：Push/pull 命令自动检测你是否在 transclusion 条目内，并相应地执行操作。即使光标在 transclusion 的子标题内，系统也能正确识别顶层 transclusion。
-
-5. *导航*：使用 =org-roam-more-transclusion-goto-original= 可以从任何 transclusion（或其子标题）快速跳转回原始节点。
+4. *导航*：使用 =org-roam-more-transclusion-goto-original= 可以从任何 transclusion（或其子标题）快速跳转回原始节点。
 
 * 工作流推荐
 
 ** 场景 1：使用 Transclusion
 
 1. 插入 transclusion：=M-x org-roam-more-insert-transclude=
-2. 就地编辑内容
-3. 推送更改：=M-x org-roam-more-transclusion-push=
-4. 如果原节点有更改：=M-x org-roam-more-transclusion-pull=
+2. 就地编辑内容（在 transclusion 条目内）
+3. 推送更改到原节点：=M-x org-roam-more-transclusion-push-current=
+4. 如果原节点有更改，拉取更新：=M-x org-roam-more-transclusion-pull-current=
 
 ** 场景 2：创建关联笔记
 

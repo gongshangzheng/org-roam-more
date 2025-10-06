@@ -55,10 +55,12 @@
 如果 REMOVE-HEADING 为非 nil，则去除首行标题（保留子标题）。
 使用指针移动方式，避免正则表达式替换的不可靠性。"
   (let* ((file (org-roam-node-file node))
-         (point (org-roam-node-point node)))
+         (node-id (org-roam-node-id node)))
     (with-current-buffer (find-file-noselect file)
       (save-excursion
-        (goto-char point)
+        ;; 使用 org-id-goto 精确定位到节点，避免位置偏差
+        (org-id-goto node-id)
+        (forward-line) ;; 跳过标题行
         (org-back-to-heading t)
         
         (cond
@@ -108,19 +110,17 @@
   "Replace the content of NODE with NEW-CONTENT while preserving heading and properties.
 Does not automatically save the file."
   (let ((file (org-roam-node-file node))
-        (point (org-roam-node-point node)))
+        (node-id (org-roam-node-id node)))
     (with-current-buffer (find-file-noselect file)
       (save-excursion
-        (goto-char point)
+        ;; 使用 org-id-goto 精确定位到节点
+        (org-id-goto node-id)
+        (org-back-to-heading t)
         (forward-line) ;; 跳过标题行
-        (let ((properties-end
-               (save-excursion
-                 (when (looking-at-p ":PROPERTIES:")
-                   (re-search-forward ":END:" nil t)
-                   (forward-line))
-                 (point)))
-              (subtree-end (progn (org-end-of-subtree t t) (point))))
-          (goto-char properties-end)
+        ;; 跳过 property drawer（如果存在）
+        (org-roam-more-skip-property-drawer)
+        (let ((properties-end (point))
+              (subtree-end (save-excursion (org-end-of-subtree t t) (point))))
           (delete-region properties-end subtree-end)
           (insert (string-trim-right new-content) "\n")
           ;; 保存文件，否则数据库不会更新
