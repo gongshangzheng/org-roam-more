@@ -65,6 +65,35 @@
 
 ;;; 辅助函数
 
+(defun org-roam-more-transclusion-content-equal-ignore-whitespace (content1 content2)
+  "比较两个内容字符串是否相同，忽略首尾空行差异。
+CONTENT1 和 CONTENT2 是要比较的内容字符串。
+返回 t 如果内容相同（忽略首尾空行），否则返回 nil。"
+  (let ((trimmed1 (string-trim content1))
+        (trimmed2 (string-trim content2)))
+    (string= trimmed1 trimmed2)))
+
+(defun org-roam-more-transclusion-show-diff-and-confirm (current-content original-content operation)
+  "显示内容差异并询问用户是否继续同步操作。
+CURRENT-CONTENT 是当前内容。
+ORIGINAL-CONTENT 是原始内容。
+OPERATION 是操作类型（'push 或 'pull），用于显示提示信息。
+返回 t 如果用户选择继续，nil 如果用户选择停止。"
+  (let ((operation-name (if (eq operation 'push) "推送" "拉取")))
+    (message "内容不同！准备进行 %s 操作..." operation-name)
+    (message "当前内容长度: %d 字符" (length current-content))
+    (message "原始内容长度: %d 字符" (length original-content))
+    (message "")
+    (message "当前内容预览（前200字符）:")
+    (message "%s" (substring current-content 0 (min 200 (length current-content))))
+    (message "")
+    (message "原始内容预览（前200字符）:")
+    (message "%s" (substring original-content 0 (min 200 (length original-content))))
+    (message "")
+    (message "建议使用 M-x org-roam-more-compare-transclusion-and-roam-content 进行详细对比")
+    (message "")
+    (y-or-n-p (format "内容不同，是否继续 %s 操作？(y/n) " operation-name))))
+
 (defun org-roam-more-find-transclusion-heading ()
   "向上查找带有 :transclusion: 标签的祖先标题。
 如果当前在 transclusion 的子标题内，返回顶层 transclusion 标题的位置。
@@ -201,7 +230,7 @@ PATH 是标题字符串列表，如 (\"一级标题\" \"二级标题\" \"目标�
       (insert (format ":ORIGINAL-ID: %s\n" node-id))
       (insert (format ":ORIGINAL-HEADING: %s\n" node-title))
       (insert (format ":ORIGINAL-NODE-LINK: [[id:%s][%s]]\n" node-id node-title))
-      ;; (insert ":END:\n")
+      (insert ":END:\n")
       
       ;; 3. 插入正文内容
       (when (and content (not (string-empty-p (string-trim content))))
@@ -312,6 +341,7 @@ Returns list of entry contents."
 (defun org-roam-more-transclusion-push-current ()
   "将当前 transclusion 条目的内容推送到其对应的 org-roam 节点。
 即使光标在 transclusion 的子标题内，也会正确找到顶层 transclusion 并推送。
+在推送前会先比较内容，如果内容不同会提示用户并询问是否继续。
 直接覆盖原 node 的内容，保留原 node 的标题和 property。"
   (interactive)
   (unless (derived-mode-p 'org-mode)
@@ -335,16 +365,29 @@ Returns list of entry contents."
         (unless node
           (user-error "无法找到原始 node (ID: %s)" original-id))
         
-        ;; 使用辅助函数获取当前 transclusion 的正文内容并直接推送
-        (let ((current-content (org-roam-more-get-current-transclusion-body)))
-          (org-roam-more-set-node-content node current-content)
-          (message "已推送到 Org-roam 节点：%s" (org-roam-node-title node)))))))
+        ;; 获取当前 transclusion 和原节点的内容
+        (let* ((current-content (org-roam-more-get-current-transclusion-body))
+               (original-content (string-trim (org-roam-more-get-node-content node t t))))
+          
+          ;; 比较内容（忽略首尾空行）
+          (if (org-roam-more-transclusion-content-equal-ignore-whitespace current-content original-content)
+              ;; 内容相同，无需更新
+              (message "内容一致，无需推送")
+            ;; 内容不同，显示差异并询问用户
+            (if (org-roam-more-transclusion-show-diff-and-confirm current-content original-content 'push)
+                ;; 用户选择继续，执行推送
+                (progn
+                  (org-roam-more-set-node-content node current-content)
+                  (message "已推送到 Org-roam 节点：%s" (org-roam-node-title node)))
+              ;; 用户选择停止
+              (message "推送操作已取消"))))))))
 
 ;;; 同步功能 - Pull（原节点 → transclusion）
 
 (defun org-roam-more-transclusion-pull-current ()
   "将当前 transclusion 条目从对应的 org-roam 节点拉取内容。
 即使光标在 transclusion 的子标题内，也会正确找到顶层 transclusion 并拉取。
+在拉取前会先比较内容，如果内容不同会提示用户并询问是否继续。
 直接覆盖 transclusion 的内容，保留 transclusion 的标题和 property。"
   (interactive)
   (unless (derived-mode-p 'org-mode)
@@ -368,11 +411,22 @@ Returns list of entry contents."
         (unless node
           (user-error "无法找到原始 node (ID: %s)" original-id))
         
-        ;; 获取原 node 的正文内容并直接拉取
-        (let ((original-content 
-               (string-trim (org-roam-more-get-node-content node t t))))
-          (org-roam-more-set-content-at-path path original-content)
-          (message "已从 Org-roam 节点拉取到当前 transclusion"))))))
+        ;; 获取当前 transclusion 和原节点的内容
+        (let* ((current-content (org-roam-more-get-current-transclusion-body))
+               (original-content (string-trim (org-roam-more-get-node-content node t t))))
+          
+          ;; 比较内容（忽略首尾空行）
+          (if (org-roam-more-transclusion-content-equal-ignore-whitespace current-content original-content)
+              ;; 内容相同，无需更新
+              (message "内容一致，无需拉取")
+            ;; 内容不同，显示差异并询问用户
+            (if (org-roam-more-transclusion-show-diff-and-confirm current-content original-content 'pull)
+                ;; 用户选择继续，执行拉取
+                (progn
+                  (org-roam-more-set-content-at-path path original-content)
+                  (message "已从 Org-roam 节点拉取到当前 transclusion"))
+              ;; 用户选择停止
+              (message "拉取操作已取消"))))))))
 
 ;;; 高级功能
 

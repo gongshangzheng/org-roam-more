@@ -80,16 +80,10 @@
   "跳过当前位置的 property drawer（如果存在）。
 假设光标已经在标题行后的第一行。
 如果有 property drawer，移动到 :END: 后的下一行的开头；否则保持不动。"
-  (when (looking-at "^[ \t]*:PROPERTIES:")
-    ;; 逐行向下查找，直到找到 :END:
-    (let ((found nil))
-      (while (and (not found) (not (eobp)))
-        (forward-line 1)
-        (when (looking-at "^[ \t]*:END:[ \t]*$")
-          (setq found t)))
-      ;; 现在光标在 :END: 行，再向下移动一行
-      (when found
-        (forward-line 1)))))
+  (when (looking-at-p org-property-drawer-re)
+    ;; 直接搜索 :END: 并向前走一行
+    (when (re-search-forward ":END:" nil t)
+      (forward-line 2))))
 
 (defun org-roam-more-get-node-content (node &optional remove-properties remove-heading)
   "获取 org-roam NODE 的内容。
@@ -107,13 +101,9 @@
          ;; 同时移除标题和属性：跳过标题行，跳过 property drawer，取剩余内容
          ((and remove-properties remove-heading)
           (forward-line 1)  ; 跳过标题行
-          ;; 如果下一行是 :PROPERTIES:，跳过整个 property drawer
-          (when (looking-at "^[ \t]*:PROPERTIES:")
-            (while (and (not (looking-at "^[ \t]*:END:[ \t]*$")) (not (eobp)))
-              (forward-line 1))
-            ;; 现在在 :END: 行，移动到下一行
-            (when (looking-at "^[ \t]*:END:[ \t]*$")
-              (forward-line 1)))
+          ;; 直接搜索 :END: 并向前走一行
+          (when (re-search-forward ":END:" nil t)
+            (forward-line 1))
           (let ((content-start (point))
                 (content-end (save-excursion
                                (org-end-of-subtree t t)
@@ -164,6 +154,7 @@ Does not automatically save the file."
         (forward-line) ;; 跳过标题行
         ;; 跳过 property drawer（如果存在）
         (org-roam-more-skip-property-drawer)
+        (forward-line) ;; 跳过 :END: 行
         (let ((properties-end (point))
               (subtree-end (save-excursion (org-end-of-subtree t t) (point))))
           (delete-region properties-end subtree-end)
