@@ -318,6 +318,14 @@ M-x org-roam-more-transclusion-pull-current
 - 验证 hook 已启用：=org-roam-more-insert-link-hook-enabled= 应为 =t=
 - 检查 =~/org/roam/daily/journal.org= 是否存在（或自定义路径）
 
+* 开发计划
+
+** TODO 功能改进
+- [ ] 使用递归处理要插入有多个node嵌套的情况
+- [ ] 优化transclusion性能
+- [ ] 添加更多内容比较选项
+- [ ] 支持批量transclusion操作
+
 * 贡献
 
 欢迎贡献！请：

@@ -186,21 +186,28 @@ PATH 是标题字符串列表，如 (\"一级标题\" \"二级标题\" \"目标�
 ;;; 核心功能
 
 (defun org-roam-more--get-node-heading-and-content (node-id)
-  "根据 NODE-ID 获取节点的标题和正文内容。
-返回 (heading . content) 的 cons cell，其中：
+  "根据 NODE-ID 获取节点的标题、层级和正文内容。
+返回 (heading . (level . content)) 的 cons cell，其中：
 - heading: 节点的标题（字符串）
+- level: 节点的层级（数字）
 - content: 节点的正文内容（不包括标题行和 property drawer）"
   (let ((node (org-roam-node-from-id node-id)))
     (unless node
       (user-error "无法找到 ID 为 %s 的节点" node-id))
-    (let* ((heading (org-roam-node-title node))
-           (content (org-roam-more-get-node-content node t t)))  ; 移除 properties 和 heading
-      (cons heading content))))
+    (let* ((file (org-roam-node-file node))
+           (node-id-str (org-roam-node-id node)))
+      (with-current-buffer (find-file-noselect file)
+        (save-excursion
+          (org-roam-more--goto-id-property node-id-str)
+          (let* ((heading (org-roam-node-title node))
+                 (level (org-outline-level))
+                 (content (org-roam-more-get-node-content node t t)))  ; 移除 properties 和 heading
+            (cons heading (cons level content))))))))
 
 (defun org-roam-more-insert-transclude (&optional node-id)
   "插入一个 transclusion，复制原 node 的内容到当前位置。
 提示用户选择一个 node，然后：
-1. 插入 2 级标题（** heading :transclusion:）
+1. 插入标题（保持原始层级，带 :transclusion: 标签）
 2. 插入 property drawer（包含 ORIGINAL-ID、ORIGINAL-HEADING、ORIGINAL-NODE-LINK）
 3. 插入 node 的正文内容（不包括原标题和 property）"
   (interactive)
@@ -214,16 +221,18 @@ PATH 是标题字符串列表，如 (\"一级标题\" \"二级标题\" \"目标�
          (node-id (org-roam-node-id node))
          (node-title (org-roam-node-title node)))
     
-    ;; 使用辅助函数获取 heading 和 content
-    (let* ((heading-and-content (org-roam-more--get-node-heading-and-content node-id))
-           (heading (car heading-and-content))
-           (content (cdr heading-and-content)))
+    ;; 使用辅助函数获取 heading、level 和 content
+    (let* ((heading-level-content (org-roam-more--get-node-heading-and-content node-id))
+           (heading (car heading-level-content))
+           (level (cadr heading-level-content))
+           (content (cddr heading-level-content)))
       
       ;; 确保从新行开始
       ;; (unless (bolp) (insert "\n"))
       
-      ;; 1. 插入 2 级标题，带 :transclusion: 标签
-      (insert (format "** %s :transclusion:\n" heading))
+      ;; 1. 插入标题，保持原始层级，带 :transclusion: 标签
+      (let ((stars (make-string level ?*)))
+        (insert (format "%s %s :transclusion:\n" stars heading)))
       
       ;; 2. 插入 property drawer
       (insert ":PROPERTIES:\n")

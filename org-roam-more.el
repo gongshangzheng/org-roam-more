@@ -78,10 +78,15 @@
 (require 'org-roam)
 
 ;; 加载子模块
+;;;###autoload
 (require 'org-roam-more-utils)
+;;;###autoload
 (require 'org-roam-more-node)
+;;;###autoload
 (require 'org-roam-more-transclusion)
+;;;###autoload
 (require 'org-roam-more-capture)
+;;;###autoload
 (require 'org-roam-more-daily)
 
 ;;; 主要功能导出

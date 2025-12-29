@@ -318,6 +318,14 @@ The package is organized into focused modules:
 - Verify hook is enabled: =org-roam-more-insert-link-hook-enabled= should be =t=
 - Check that =~/org/roam/daily/journal.org= exists (or customize the path)
 
+* Development Plans
+
+** TODO Feature Improvements
+- [ ] Use recursion to handle multiple nested nodes when inserting
+- [ ] Optimize transclusion performance
+- [ ] Add more content comparison options
+- [ ] Support batch transclusion operations
+
 * Contributing
 
 Contributions are welcome! Please:

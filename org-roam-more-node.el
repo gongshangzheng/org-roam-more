@@ -83,7 +83,7 @@
   (when (looking-at-p org-property-drawer-re)
     ;; 直接搜索 :END: 并向前走一行
     (when (re-search-forward ":END:" nil t)
-      (forward-line 2))))
+      (forward-line 1))))
 
 (defun org-roam-more-get-node-content (node &optional remove-properties remove-heading)
   "获取 org-roam NODE 的内容。
